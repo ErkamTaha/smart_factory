@@ -2,6 +2,8 @@ import paho.mqtt.client as mqtt
 from typing import Callable, Dict, List, Optional, Union
 import json
 import logging
+import asyncio
+import threading
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +16,8 @@ class MQTTClient:
         self.password = password
         self.client = mqtt.Client(client_id="smart_factory_backend")
         self.subscriptions: Dict[str, List[Callable]] = {}
+        self.websocket_manager = None  # Will be set from main.py
+        self.main_loop = None  # Will store the main event loop
         
         # Setup callbacks
         self.client.on_connect = self._on_connect
@@ -24,6 +28,30 @@ class MQTTClient:
         if username and password:
             self.client.username_pw_set(username, password)
     
+    def set_websocket_manager(self, websocket_manager):
+        """Set WebSocket manager for broadcasting"""
+        self.websocket_manager = websocket_manager
+        # Store the main event loop for later use
+        try:
+            self.main_loop = asyncio.get_running_loop()
+            logger.info("WebSocket manager connected to MQTT client")
+        except RuntimeError:
+            logger.warning("No running event loop found, WebSocket broadcasting may not work")
+    
+    def _safe_broadcast(self, coro):
+        """Safely schedule a coroutine to run in the main event loop"""
+        if self.main_loop and self.websocket_manager:
+            try:
+                # Schedule the coroutine to run in the main thread's event loop
+                asyncio.run_coroutine_threadsafe(coro, self.main_loop)
+            except Exception as e:
+                logger.error(f"Error scheduling WebSocket broadcast: {e}")
+        else:
+            if not self.websocket_manager:
+                logger.debug("WebSocket manager not available, skipping broadcast")
+            if not self.main_loop:
+                logger.debug("Main event loop not available, skipping broadcast")
+    
     def _on_connect(self, client, userdata, flags, rc):
         if rc == 0:
             logger.info(f"Connected to MQTT broker at {self.broker_host}:{self.broker_port}")
@@ -31,11 +59,39 @@ class MQTTClient:
             for topic in self.subscriptions.keys():
                 client.subscribe(topic)
                 logger.info(f"Subscribed to topic: {topic}")
+            
+            # Safely broadcast connection status via WebSocket
+            if self.websocket_manager:
+                self._safe_broadcast(
+                    self.websocket_manager.broadcast_system_alert(
+                        "info", 
+                        "MQTT broker connected",
+                        {"broker": f"{self.broker_host}:{self.broker_port}"}
+                    )
+                )
         else:
             logger.error(f"Failed to connect to MQTT broker. Return code: {rc}")
+            # Safely broadcast connection failure
+            if self.websocket_manager:
+                self._safe_broadcast(
+                    self.websocket_manager.broadcast_system_alert(
+                        "error", 
+                        "MQTT broker connection failed",
+                        {"return_code": rc}
+                    )
+                )
     
     def _on_disconnect(self, client, userdata, rc):
         logger.warning(f"Disconnected from MQTT broker. Return code: {rc}")
+        # Safely broadcast disconnection via WebSocket
+        if self.websocket_manager:
+            self._safe_broadcast(
+                self.websocket_manager.broadcast_system_alert(
+                    "warning", 
+                    "MQTT broker disconnected",
+                    {"return_code": rc}
+                )
+            )
     
     def _on_message(self, client, userdata, msg):
         topic = msg.topic
@@ -43,15 +99,22 @@ class MQTTClient:
         
         logger.info(f"Received message on topic {topic}: {payload}")
         
-        # Call all registered callbacks for this topic
+        # Parse payload
+        try:
+            data = json.loads(payload)
+        except json.JSONDecodeError:
+            data = payload
+        
+        # Safely broadcast to WebSocket clients (for real-time updates)
+        if self.websocket_manager:
+            self._safe_broadcast(
+                self.websocket_manager.broadcast_sensor_data(topic, data)
+            )
+        
+        # Call all registered callbacks for this topic (existing functionality)
         if topic in self.subscriptions:
             for callback in self.subscriptions[topic]:
                 try:
-                    # Try to parse as JSON, otherwise send as string
-                    try:
-                        data = json.loads(payload)
-                    except json.JSONDecodeError:
-                        data = payload
                     callback(topic, data)
                 except Exception as e:
                     logger.error(f"Error in callback for topic {topic}: {e}")
@@ -75,13 +138,37 @@ class MQTTClient:
     def publish(self, topic: str, payload: Union[dict, str]):
         """Publish message to topic"""
         if isinstance(payload, dict):
-            payload = json.dumps(payload)
+            payload_str = json.dumps(payload)
+        else:
+            payload_str = str(payload)
         
-        result = self.client.publish(topic, payload)
+        result = self.client.publish(topic, payload_str)
         if result.rc == mqtt.MQTT_ERR_SUCCESS:
-            logger.info(f"Published to {topic}: {payload}")
+            logger.info(f"Published to {topic}: {payload_str}")
+            
+            # Safely broadcast publish event via WebSocket
+            if self.websocket_manager:
+                self._safe_broadcast(
+                    self.websocket_manager.broadcast({
+                        "type": "mqtt_publish",
+                        "topic": topic,
+                        "payload": payload if isinstance(payload, dict) else payload_str,
+                        "status": "success"
+                    })
+                )
         else:
             logger.error(f"Failed to publish to {topic}")
+            
+            # Safely broadcast publish failure
+            if self.websocket_manager:
+                self._safe_broadcast(
+                    self.websocket_manager.broadcast_system_alert(
+                        "error",
+                        f"Failed to publish to MQTT topic: {topic}",
+                        {"return_code": result.rc}
+                    )
+                )
+        
         return result
     
     def subscribe(self, topic: str, callback: Callable):
