@@ -9,9 +9,10 @@ from app.config import settings
 from app.mqtt.client import init_mqtt_client, get_mqtt_client
 from app.mqtt.user_client_manager import init_user_mqtt_manager, get_user_mqtt_manager
 from app.websocket.manager import get_websocket_manager
+from app.security.acl_manager import init_acl_manager, get_acl_manager
 from app.routes import iot
 
-# Import both WebSocket route modules
+# Import WebSocket and ACL routes
 try:
     from app.routes import websocket_per_user
     PER_USER_MQTT_AVAILABLE = True
@@ -20,6 +21,15 @@ except ImportError as e:
     print(f"❌ Failed to import per-user MQTT routes: {e}")
     PER_USER_MQTT_AVAILABLE = False
     websocket_per_user = None
+
+try:
+    from app.routes import acl
+    ACL_ROUTES_AVAILABLE = True
+    print("✅ ACL routes imported successfully")
+except ImportError as e:
+    print(f"❌ Failed to import ACL routes: {e}")
+    ACL_ROUTES_AVAILABLE = False
+    acl = None
 
 # Configure logging
 logging.basicConfig(
@@ -36,6 +46,14 @@ async def lifespan(app: FastAPI):
     
     # Get main event loop
     main_loop = asyncio.get_running_loop()
+    
+    # Initialize ACL Manager
+    try:
+        acl_mgr = init_acl_manager("acl_config.json")
+        logger.info("ACL manager initialized successfully")
+        logger.info(f"ACL Info: {acl_mgr.get_acl_info()}")
+    except Exception as e:
+        logger.error(f"Failed to initialize ACL manager: {e}")
     
     # Initialize shared MQTT client (for system/broadcast)
     ws_manager = get_websocket_manager()
@@ -72,6 +90,11 @@ async def lifespan(app: FastAPI):
     # Shutdown
     logger.info("Shutting down application...")
     
+    # Stop ACL file watcher
+    acl_mgr = get_acl_manager()
+    if acl_mgr:
+        acl_mgr.stop_watching()
+    
     # Disconnect shared MQTT client
     mqtt = get_mqtt_client()
     if mqtt is not None:
@@ -88,7 +111,7 @@ async def lifespan(app: FastAPI):
 # Create FastAPI app
 app = FastAPI(
     title="Smart Factory API",
-    description="Backend API with per-user MQTT sessions and WebSocket support",
+    description="Backend API with per-user MQTT sessions, ACL, and WebSocket support",
     version="2.0.0",
     lifespan=lifespan
 )
@@ -114,15 +137,26 @@ else:
     print("❌ Per-user MQTT WebSocket router not included")
     logger.warning("Per-user MQTT functionality is not available")
 
+# Include ACL management router
+if ACL_ROUTES_AVAILABLE and acl is not None:
+    app.include_router(acl.router)
+    print("✅ ACL management router included at /api/acl")
+    logger.info("ACL management endpoints available at /api/acl")
+else:
+    print("❌ ACL management router not included")
+
 # Root endpoint
 @app.get("/")
 async def root():
     user_mqtt_mgr = get_user_mqtt_manager()
+    acl_mgr = get_acl_manager()
+    
     return {
         "message": "Smart Factory API is running",
         "status": "healthy",
         "mqtt_connected": get_mqtt_client() is not None,
         "per_user_mqtt_enabled": PER_USER_MQTT_AVAILABLE,
+        "acl_enabled": acl_mgr is not None,
         "active_user_sessions": user_mqtt_mgr.get_connection_count() if user_mqtt_mgr else 0
     }
 
@@ -130,12 +164,15 @@ async def root():
 async def health_check():
     mqtt = get_mqtt_client()
     user_mqtt_mgr = get_user_mqtt_manager()
+    acl_mgr = get_acl_manager()
     
     return {
         "status": "ok",
         "service": "Smart Factory Backend",
         "mqtt_status": "connected" if mqtt is not None else "disconnected",
         "per_user_mqtt_enabled": PER_USER_MQTT_AVAILABLE,
+        "acl_enabled": acl_mgr is not None,
+        "acl_info": acl_mgr.get_acl_info() if acl_mgr else None,
         "active_user_sessions": user_mqtt_mgr.get_connection_count() if user_mqtt_mgr else 0
     }
 

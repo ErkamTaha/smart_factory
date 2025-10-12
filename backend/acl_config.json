@@ -1,99 +1,114 @@
 {
-    "version": "1.0",
-    "default_policy": "deny",
-    "roles": {
-        "admin": {
-            "description": "Full access to all topics",
-            "permissions": [
-                {
-                    "pattern": "#",
-                    "allow": [
-                        "subscribe",
-                        "publish"
-                    ]
-                }
-            ]
-        },
-        "operator": {
-            "description": "Can read all sensors, write to commands",
-            "permissions": [
-                {
-                    "pattern": "sf/sensors/#",
-                    "allow": [
-                        "subscribe"
-                    ]
-                },
-                {
-                    "pattern": "sf/commands/#",
-                    "allow": [
-                        "publish"
-                    ]
-                }
-            ]
-        },
-        "viewer": {
-            "description": "Read-only access to sensors",
-            "permissions": [
-                {
-                    "pattern": "sf/sensors/#",
-                    "allow": [
-                        "subscribe"
-                    ]
-                }
-            ]
-        },
-        "device_owner": {
-            "description": "Full access to own devices only",
-            "permissions": [
-                {
-                    "pattern": "sf/sensors/${user_id}/#",
-                    "allow": [
-                        "subscribe",
-                        "publish"
-                    ]
-                },
-                {
-                    "pattern": "sf/commands/${user_id}/#",
-                    "allow": [
-                        "subscribe",
-                        "publish"
-                    ]
-                }
-            ]
+  "version": "1.0",
+  "default_policy": "deny",
+  "roles": {
+    "admin": {
+      "description": "Full access to all topics",
+      "permissions": [
+        {
+          "pattern": "#",
+          "allow": [
+            "subscribe",
+            "publish"
+          ]
         }
+      ]
     },
-    "users": {
-        "alice": {
-            "roles": [
-                "admin"
-            ],
-            "custom_permissions": []
+    "operator": {
+      "description": "Can read all sensors, write to commands",
+      "permissions": [
+        {
+          "pattern": "sf/sensors/#",
+          "allow": [
+            "subscribe"
+          ]
         },
-        "bob": {
-            "roles": [
-                "operator"
-            ],
-            "custom_permissions": [
-                {
-                    "pattern": "sf/sensors/room1/#",
-                    "allow": [
-                        "subscribe",
-                        "publish"
-                    ]
-                }
-            ]
-        },
-        "charlie": {
-            "roles": [
-                "viewer"
-            ],
-            "custom_permissions": []
-        },
-        "dave": {
-            "roles": [
-                "device_owner"
-            ],
-            "custom_permissions": []
+        {
+          "pattern": "sf/commands/#",
+          "allow": [
+            "publish"
+          ]
         }
+      ]
+    },
+    "viewer": {
+      "description": "Read-only access to sensors",
+      "permissions": [
+        {
+          "pattern": "sf/sensors/#",
+          "allow": [
+            "subscribe"
+          ]
+        }
+      ]
+    },
+    "device_owner": {
+      "description": "Full access to own devices only",
+      "permissions": [
+        {
+          "pattern": "sf/sensors/${user_id}/#",
+          "allow": [
+            "subscribe",
+            "publish"
+          ]
+        },
+        {
+          "pattern": "sf/commands/${user_id}/#",
+          "allow": [
+            "subscribe",
+            "publish"
+          ]
+        }
+      ]
     }
+  },
+  "users": {
+    "alice": {
+      "roles": [
+        "admin"
+      ],
+      "custom_permissions": []
+    },
+    "bob": {
+      "roles": [
+        "operator"
+      ],
+      "custom_permissions": [
+        {
+          "pattern": "sf/sensors/room1/#",
+          "allow": [
+            "subscribe",
+            "publish"
+          ]
+        }
+      ]
+    },
+    "charlie": {
+      "roles": [
+        "viewer",
+        "operator"
+      ],
+      "custom_permissions": []
+    },
+    "dave": {
+      "roles": [
+        "device_owner"
+      ],
+      "custom_permissions": []
+    },
+    "eve": {
+      "roles": [
+        "device_owner"
+      ],
+      "custom_permissions": [
+        {
+          "pattern": "sf/sensors/special/#",
+          "allow": [
+            "subscribe",
+            "publish"
+          ]
+        }
+      ]
+    }
+  }
 }
