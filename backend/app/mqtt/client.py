@@ -4,20 +4,37 @@ import json
 import logging
 import asyncio
 import threading
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
 class MQTTClient:
     def __init__(self, broker_host: str, broker_port: int, 
-                 username: Optional[str] = None, password: Optional[str] = None):
+                 username: Optional[str] = None, password: Optional[str] = None,
+                 qos: int = 1):
         self.broker_host = broker_host
         self.broker_port = broker_port
         self.username = username
         self.password = password
+        self.qos = qos  # Default QoS level for this client
         self.client = mqtt.Client(client_id="smart_factory_backend")
         self.subscriptions: Dict[str, List[Callable]] = {}
         self.websocket_manager = None  # Will be set from main.py
         self.main_loop = None  # Will store the main event loop
+        
+        # Setup Last Will and Testament
+        # Backend going offline is critical - use QoS 1 and retain
+        self.client.will_set(
+            topic="sf/backend/status",
+            payload=json.dumps({
+                "status": "offline",
+                "client_id": "smart_factory_backend",
+                "reason": "unexpected_disconnect",
+                "timestamp": None  # Broker will use current time when publishing LWT
+            }),
+            qos=1,
+            retain=True
+        )
         
         # Setup callbacks
         self.client.on_connect = self._on_connect
@@ -55,10 +72,22 @@ class MQTTClient:
     def _on_connect(self, client, userdata, flags, rc):
         if rc == 0:
             logger.info(f"Connected to MQTT broker at {self.broker_host}:{self.broker_port}")
-            # Resubscribe to topics on reconnection
-            for topic in self.subscriptions.keys():
-                client.subscribe(topic)
-                logger.info(f"Subscribed to topic: {topic}")
+            
+            # Publish online status immediately after connecting (overrides LWT)
+            # Use retained message so new subscribers see it immediately
+            online_status = json.dumps({
+                "status": "online",
+                "client_id": "smart_factory_backend",
+                "timestamp": datetime.utcnow().isoformat()
+            })
+            client.publish("sf/backend/status", online_status, qos=1, retain=True)
+            logger.info("Published backend online status")
+            
+            # Resubscribe to topics on reconnection with QoS
+            # Create a copy of keys to avoid RuntimeError if dict changes during iteration
+            for topic in list(self.subscriptions.keys()):
+                client.subscribe(topic, qos=self.qos)
+                logger.info(f"Subscribed to topic: {topic} with QoS {self.qos}")
             
             # Safely broadcast connection status via WebSocket
             if self.websocket_manager:
@@ -96,8 +125,9 @@ class MQTTClient:
     def _on_message(self, client, userdata, msg):
         topic = msg.topic
         payload = msg.payload.decode()
+        qos = msg.qos
         
-        logger.info(f"Received message on topic {topic}: {payload}")
+        logger.info(f"Received message on topic {topic} (QoS {qos}): {payload}")
         
         # Parse payload
         try:
@@ -130,21 +160,42 @@ class MQTTClient:
             raise
     
     def disconnect(self):
-        """Disconnect from MQTT broker"""
+        """Disconnect from MQTT broker gracefully"""
+        # Publish offline status before disconnecting (graceful shutdown)
+        offline_status = json.dumps({
+            "status": "offline",
+            "client_id": "smart_factory_backend",
+            "reason": "graceful_shutdown",
+            "timestamp": datetime.utcnow().isoformat()
+        })
+        self.client.publish("sf/backend/status", offline_status, qos=1, retain=True)
+        logger.info("Published backend offline status (graceful shutdown)")
+        
         self.client.loop_stop()
         self.client.disconnect()
         logger.info("Disconnected from MQTT broker")
     
-    def publish(self, topic: str, payload: Union[dict, str]):
-        """Publish message to topic"""
+    def publish(self, topic: str, payload: Union[dict, str], qos: Optional[int] = None, retain: bool = False):
+        """
+        Publish message to topic
+        
+        Args:
+            topic: MQTT topic to publish to
+            payload: Message payload (dict or string)
+            qos: Quality of Service level (0, 1, or 2). If None, uses client's default QoS
+            retain: Whether to retain the message on the broker
+        """
         if isinstance(payload, dict):
             payload_str = json.dumps(payload)
         else:
             payload_str = str(payload)
         
-        result = self.client.publish(topic, payload_str)
+        # Use provided QoS or fall back to client default
+        publish_qos = qos if qos is not None else self.qos
+        
+        result = self.client.publish(topic, payload_str, qos=publish_qos, retain=retain)
         if result.rc == mqtt.MQTT_ERR_SUCCESS:
-            logger.info(f"Published to {topic}: {payload_str}")
+            logger.info(f"Published to {topic} (QoS {publish_qos}, retain={retain}): {payload_str}")
             
             # Safely broadcast publish event via WebSocket
             if self.websocket_manager:
@@ -153,11 +204,13 @@ class MQTTClient:
                         "type": "mqtt_publish",
                         "topic": topic,
                         "payload": payload if isinstance(payload, dict) else payload_str,
+                        "qos": publish_qos,
+                        "retain": retain,
                         "status": "success"
                     })
                 )
         else:
-            logger.error(f"Failed to publish to {topic}")
+            logger.error(f"Failed to publish to {topic} (QoS {publish_qos})")
             
             # Safely broadcast publish failure
             if self.websocket_manager:
@@ -165,17 +218,27 @@ class MQTTClient:
                     self.websocket_manager.broadcast_system_alert(
                         "error",
                         f"Failed to publish to MQTT topic: {topic}",
-                        {"return_code": result.rc}
+                        {"return_code": result.rc, "qos": publish_qos}
                     )
                 )
         
         return result
     
-    def subscribe(self, topic: str, callback: Callable):
-        """Subscribe to topic with callback function"""
+    def subscribe(self, topic: str, callback: Callable, qos: Optional[int] = None):
+        """
+        Subscribe to topic with callback function
+        
+        Args:
+            topic: MQTT topic to subscribe to
+            callback: Callback function to call when message is received
+            qos: Quality of Service level (0, 1, or 2). If None, uses client's default QoS
+        """
+        subscribe_qos = qos if qos is not None else self.qos
+        
         if topic not in self.subscriptions:
             self.subscriptions[topic] = []
-            self.client.subscribe(topic)
+            self.client.subscribe(topic, qos=subscribe_qos)
+            logger.info(f"Subscribed to topic: {topic} with QoS {subscribe_qos}")
         
         self.subscriptions[topic].append(callback)
         logger.info(f"Added callback for topic: {topic}")
@@ -195,8 +258,31 @@ def get_mqtt_client() -> Optional[MQTTClient]:
     return mqtt_client
 
 def init_mqtt_client(broker_host: str, broker_port: int, 
-                     username: Optional[str] = None, password: Optional[str] = None) -> MQTTClient:
-    """Initialize global MQTT client"""
+                     username: Optional[str] = None, password: Optional[str] = None,
+                     qos: int = 1) -> MQTTClient:
+    """
+    Initialize global MQTT client
+    
+    Args:
+        broker_host: MQTT broker hostname
+        broker_port: MQTT broker port
+        username: Optional MQTT username
+        password: Optional MQTT password
+        qos: Default Quality of Service level (0, 1, or 2). Default is 1.
+    """
     global mqtt_client
-    mqtt_client = MQTTClient(broker_host, broker_port, username, password)
+    mqtt_client = MQTTClient(broker_host, broker_port, username, password, qos)
     return mqtt_client
+
+
+"""
+FILE 1 of 2: client.py
+This is the updated backend MQTT client with QoS and Last Will Testament.
+
+Key changes:
+- Added QoS parameter to __init__, publish(), and subscribe()
+- Implemented Last Will Testament on topic "factory/backend/status"
+- Publishes online status after connecting
+- Publishes offline status on graceful disconnect
+- All MQTT operations now include QoS level
+"""

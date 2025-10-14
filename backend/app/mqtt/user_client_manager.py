@@ -14,7 +14,8 @@ class UserMQTTClient:
     
     def __init__(self, user_id: str, broker_host: str, broker_port: int,
                  websocket: WebSocket, main_loop,
-                 username: Optional[str] = None, password: Optional[str] = None):
+                 username: Optional[str] = None, password: Optional[str] = None,
+                 qos: int = 1):
         self.user_id = user_id
         self.broker_host = broker_host
         self.broker_port = broker_port
@@ -22,6 +23,7 @@ class UserMQTTClient:
         self.main_loop = main_loop
         self.username = username
         self.password = password
+        self.qos = qos  # Default QoS level
         
         # Create unique MQTT client ID for this user
         client_id = f"smart_factory_user_{user_id}_{id(self)}"
@@ -29,6 +31,20 @@ class UserMQTTClient:
         
         self.subscribed_topics: List[str] = []
         self.is_connected = False
+        
+        # Setup Last Will and Testament for user disconnection
+        # User disconnection is important - use QoS 1 and retain
+        self.client.will_set(
+            topic=f"sf/users/{user_id}/status",
+            payload=json.dumps({
+                "user_id": user_id,
+                "status": "offline",
+                "reason": "unexpected_disconnect",
+                "timestamp": datetime.utcnow().isoformat()
+            }),
+            qos=1,
+            retain=True
+        )
         
         # Setup callbacks
         self.client.on_connect = self._on_connect
@@ -39,7 +55,7 @@ class UserMQTTClient:
         if username and password:
             self.client.username_pw_set(username, password)
         
-        logger.info(f"Created MQTT client for user: {user_id}")
+        logger.info(f"Created MQTT client for user: {user_id} with QoS {qos}")
     
     def _check_acl_permission(self, topic: str, action: str) -> bool:
         """Check if user has permission using ACL"""
@@ -56,11 +72,20 @@ class UserMQTTClient:
             self.is_connected = True
             logger.info(f"User {self.user_id} connected to MQTT broker")
             
+            # Publish online status immediately after connecting (overrides LWT)
+            online_status = json.dumps({
+                "user_id": self.user_id,
+                "status": "online",
+                "timestamp": datetime.utcnow().isoformat()
+            })
+            client.publish(f"sf/users/{self.user_id}/status", online_status, qos=1, retain=True)
+            logger.info(f"Published online status for user {self.user_id}")
+            
             # Resubscribe to topics on reconnection (check permissions again)
             for topic in self.subscribed_topics[:]:  # Copy list to avoid modification during iteration
                 if self._check_acl_permission(topic, "subscribe"):
-                    client.subscribe(topic)
-                    logger.info(f"User {self.user_id} resubscribed to: {topic}")
+                    client.subscribe(topic, qos=self.qos)
+                    logger.info(f"User {self.user_id} resubscribed to: {topic} with QoS {self.qos}")
                 else:
                     # Remove from subscribed list if permission revoked
                     self.subscribed_topics.remove(topic)
@@ -77,6 +102,7 @@ class UserMQTTClient:
                 "type": "mqtt_status",
                 "status": "connected",
                 "message": "Your MQTT session is connected",
+                "qos": self.qos,
                 "timestamp": datetime.utcnow().isoformat()
             })
         else:
@@ -106,8 +132,9 @@ class UserMQTTClient:
         """Called when MQTT message is received"""
         topic = msg.topic
         payload = msg.payload.decode()
+        qos = msg.qos
         
-        logger.info(f"User {self.user_id} received message on {topic}")
+        logger.info(f"User {self.user_id} received message on {topic} (QoS {qos})")
         
         # Double-check permission (in case ACL changed)
         if not self._check_acl_permission(topic, "subscribe"):
@@ -127,6 +154,7 @@ class UserMQTTClient:
             "type": "sensor_data",
             "topic": topic,
             "data": data,
+            "qos": qos,
             "timestamp": datetime.utcnow().isoformat()
         })
     
@@ -150,8 +178,18 @@ class UserMQTTClient:
             raise
     
     def disconnect(self):
-        """Disconnect from MQTT broker"""
+        """Disconnect from MQTT broker gracefully"""
         try:
+            # Publish offline status before disconnecting (graceful shutdown)
+            offline_status = json.dumps({
+                "user_id": self.user_id,
+                "status": "offline",
+                "reason": "graceful_disconnect",
+                "timestamp": datetime.utcnow().isoformat()
+            })
+            self.client.publish(f"sf/users/{self.user_id}/status", offline_status, qos=1, retain=True)
+            logger.info(f"Published offline status for user {self.user_id} (graceful)")
+            
             self.client.loop_stop()
             self.client.disconnect()
             self.is_connected = False
@@ -159,8 +197,14 @@ class UserMQTTClient:
         except Exception as e:
             logger.error(f"Error disconnecting user {self.user_id} from MQTT: {e}")
     
-    def subscribe(self, topic: str) -> Dict[str, Any]:
-        """Subscribe to MQTT topic with ACL check"""
+    def subscribe(self, topic: str, qos: Optional[int] = None) -> Dict[str, Any]:
+        """
+        Subscribe to MQTT topic with ACL check
+        
+        Args:
+            topic: MQTT topic to subscribe to
+            qos: Quality of Service level (0, 1, or 2). If None, uses client's default QoS
+        """
         # Check ACL permission
         if not self._check_acl_permission(topic, "subscribe"):
             logger.warning(f"User {self.user_id} denied subscription to: {topic}")
@@ -170,13 +214,16 @@ class UserMQTTClient:
                 "topic": topic
             }
         
+        subscribe_qos = qos if qos is not None else self.qos
+        
         if topic not in self.subscribed_topics:
             self.subscribed_topics.append(topic)
-            self.client.subscribe(topic)
-            logger.info(f"User {self.user_id} subscribed to: {topic}")
+            self.client.subscribe(topic, qos=subscribe_qos)
+            logger.info(f"User {self.user_id} subscribed to: {topic} with QoS {subscribe_qos}")
             return {
                 "success": True,
-                "topic": topic
+                "topic": topic,
+                "qos": subscribe_qos
             }
         
         return {
@@ -201,8 +248,16 @@ class UserMQTTClient:
             "topic": topic
         }
     
-    def publish(self, topic: str, payload) -> Dict[str, Any]:
-        """Publish message to MQTT topic with ACL check"""
+    def publish(self, topic: str, payload, qos: Optional[int] = None, retain: bool = False) -> Dict[str, Any]:
+        """
+        Publish message to MQTT topic with ACL check
+        
+        Args:
+            topic: MQTT topic to publish to
+            payload: Message payload (dict or string)
+            qos: Quality of Service level (0, 1, or 2). If None, uses client's default QoS
+            retain: Whether to retain the message on the broker
+        """
         # Check ACL permission
         if not self._check_acl_permission(topic, "publish"):
             logger.warning(f"User {self.user_id} denied publish to: {topic}")
@@ -223,20 +278,25 @@ class UserMQTTClient:
         else:
             payload_str = str(payload)
         
-        result = self.client.publish(topic, payload_str)
+        publish_qos = qos if qos is not None else self.qos
+        
+        result = self.client.publish(topic, payload_str, qos=publish_qos, retain=retain)
         if result.rc == mqtt.MQTT_ERR_SUCCESS:
-            logger.info(f"User {self.user_id} published to {topic}")
+            logger.info(f"User {self.user_id} published to {topic} (QoS {publish_qos}, retain={retain})")
             
             # Notify user of successful publish
             self._send_to_user({
                 "type": "publish_ack",
                 "topic": topic,
                 "status": "success",
+                "qos": publish_qos,
+                "retain": retain,
                 "timestamp": datetime.utcnow().isoformat()
             })
             return {
                 "success": True,
-                "topic": topic
+                "topic": topic,
+                "qos": publish_qos
             }
         else:
             logger.error(f"User {self.user_id} failed to publish to {topic}")
@@ -245,6 +305,7 @@ class UserMQTTClient:
                 "topic": topic,
                 "status": "error",
                 "return_code": result.rc,
+                "qos": publish_qos,
                 "timestamp": datetime.utcnow().isoformat()
             })
             return {
@@ -256,27 +317,38 @@ class UserMQTTClientManager:
     """Manages MQTT clients for multiple users"""
     
     def __init__(self, broker_host: str, broker_port: int,
-                 username: Optional[str] = None, password: Optional[str] = None):
+                 username: Optional[str] = None, password: Optional[str] = None,
+                 qos: int = 1):
         self.broker_host = broker_host
         self.broker_port = broker_port
         self.username = username
         self.password = password
+        self.qos = qos  # Default QoS for all user clients
         self.user_clients: Dict[str, UserMQTTClient] = {}
         self.main_loop = None
         
-        logger.info("UserMQTTClientManager initialized")
+        logger.info(f"UserMQTTClientManager initialized with default QoS {qos}")
     
     def set_main_loop(self, loop):
         """Set the main event loop for WebSocket communication"""
         self.main_loop = loop
         logger.info("Main event loop set for UserMQTTClientManager")
     
-    def create_user_client(self, user_id: str, websocket: WebSocket) -> UserMQTTClient:
-        """Create and connect MQTT client for a user"""
+    def create_user_client(self, user_id: str, websocket: WebSocket, qos: Optional[int] = None) -> UserMQTTClient:
+        """
+        Create and connect MQTT client for a user
+        
+        Args:
+            user_id: Unique user identifier
+            websocket: WebSocket connection for the user
+            qos: Quality of Service level (0, 1, or 2). If None, uses manager's default QoS
+        """
         # If user already has a client, disconnect it first
         if user_id in self.user_clients:
             logger.warning(f"User {user_id} already has an MQTT client, replacing it")
             self.remove_user_client(user_id)
+        
+        client_qos = qos if qos is not None else self.qos
         
         # Create new client
         client = UserMQTTClient(
@@ -286,7 +358,8 @@ class UserMQTTClientManager:
             websocket=websocket,
             main_loop=self.main_loop,
             username=self.username,
-            password=self.password
+            password=self.password,
+            qos=client_qos
         )
         
         # Connect to MQTT broker
@@ -295,7 +368,7 @@ class UserMQTTClientManager:
         # Store client
         self.user_clients[user_id] = client
         
-        logger.info(f"Created and connected MQTT client for user: {user_id}")
+        logger.info(f"Created and connected MQTT client for user: {user_id} with QoS {client_qos}")
         return client
     
     def get_user_client(self, user_id: str) -> Optional[UserMQTTClient]:
@@ -317,6 +390,7 @@ class UserMQTTClientManager:
                 "user_id": user_id,
                 "is_connected": client.is_connected,
                 "subscribed_topics": client.subscribed_topics,
+                "qos": client.qos,
                 "broker": f"{self.broker_host}:{self.broker_port}"
             }
             for user_id, client in self.user_clients.items()
@@ -342,8 +416,31 @@ def get_user_mqtt_manager() -> Optional[UserMQTTClientManager]:
 
 def init_user_mqtt_manager(broker_host: str, broker_port: int,
                            username: Optional[str] = None, 
-                           password: Optional[str] = None) -> UserMQTTClientManager:
-    """Initialize global user MQTT manager"""
+                           password: Optional[str] = None,
+                           qos: int = 1) -> UserMQTTClientManager:
+    """
+    Initialize global user MQTT manager
+    
+    Args:
+        broker_host: MQTT broker hostname
+        broker_port: MQTT broker port
+        username: Optional MQTT username
+        password: Optional MQTT password
+        qos: Default Quality of Service level (0, 1, or 2). Default is 1.
+    """
     global user_mqtt_manager
-    user_mqtt_manager = UserMQTTClientManager(broker_host, broker_port, username, password)
+    user_mqtt_manager = UserMQTTClientManager(broker_host, broker_port, username, password, qos)
     return user_mqtt_manager
+
+
+"""
+FILE 2 of 2: user_client_manager.py
+This is the updated user MQTT client manager with QoS and Last Will Testament.
+
+Key changes:
+- Added QoS parameter to UserMQTTClient and UserMQTTClientManager
+- Implemented Last Will Testament on topic "factory/users/{user_id}/status"
+- Each user publishes their online/offline status
+- ACL-enforced publish() and subscribe() now support QoS
+- All MQTT operations include QoS level in logs and responses
+"""
