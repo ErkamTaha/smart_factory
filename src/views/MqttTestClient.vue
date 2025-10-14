@@ -2,172 +2,402 @@
     <ion-page>
         <ion-header>
             <ion-toolbar color="primary">
-                <ion-title>🏭 MQTT QoS & LWT Test Client</ion-title>
+                <ion-buttons slot="start">
+                    <ion-back-button default-href="/"></ion-back-button>
+                </ion-buttons>
+                <ion-title>🏭 MQTT Test & Management</ion-title>
+                <ion-buttons slot="end">
+                    <ion-button @click="activeTab = 'mqtt'" :class="{ 'active-tab': activeTab === 'mqtt' }">
+                        MQTT
+                    </ion-button>
+                    <ion-button @click="activeTab = 'acl'" :class="{ 'active-tab': activeTab === 'acl' }">
+                        ACL
+                    </ion-button>
+                </ion-buttons>
             </ion-toolbar>
         </ion-header>
 
         <ion-content :fullscreen="true" class="ion-padding">
-            <!-- Connection Status -->
-            <ion-card>
-                <ion-card-header>
-                    <ion-card-title>🔌 Connection</ion-card-title>
-                </ion-card-header>
-                <ion-card-content>
-                    <ion-chip :color="statusColor">
-                        <ion-label>{{ connectionStatus }}</ion-label>
-                    </ion-chip>
+            <!-- MQTT Test Tab -->
+            <div v-if="activeTab === 'mqtt'">
+                <!-- Connection Status Card -->
+                <ion-card>
+                    <ion-card-header>
+                        <ion-card-title>
+                            <ion-chip :color="statusColor">
+                                <ion-label>{{ connectionStatus }}</ion-label>
+                            </ion-chip>
+                        </ion-card-title>
+                    </ion-card-header>
+                    <ion-card-content>
+                        <ion-grid>
+                            <ion-row>
+                                <ion-col size="12" size-md="6">
+                                    <ion-item>
+                                        <ion-label position="stacked">User ID</ion-label>
+                                        <ion-input v-model="userId" placeholder="alice, bob, charlie..."
+                                            :disabled="isConnected"></ion-input>
+                                    </ion-item>
+                                </ion-col>
+                                <ion-col size="12" size-md="6">
+                                    <ion-item>
+                                        <ion-label position="stacked">WebSocket URL</ion-label>
+                                        <ion-input v-model="wsUrl" placeholder="ws://localhost:8000/ws/ws"
+                                            :disabled="isConnected"></ion-input>
+                                    </ion-item>
+                                </ion-col>
+                            </ion-row>
+                            <ion-row>
+                                <ion-col size="6">
+                                    <ion-button expand="block" @click="connect" :disabled="isConnected">
+                                        <ion-icon :icon="powerOutline" slot="start"></ion-icon>
+                                        Connect
+                                    </ion-button>
+                                </ion-col>
+                                <ion-col size="6">
+                                    <ion-button expand="block" color="danger" @click="disconnect"
+                                        :disabled="!isConnected">
+                                        <ion-icon :icon="closeCircleOutline" slot="start"></ion-icon>
+                                        Disconnect
+                                    </ion-button>
+                                </ion-col>
+                            </ion-row>
+                        </ion-grid>
+                    </ion-card-content>
+                </ion-card>
 
-                    <ion-item>
-                        <ion-label position="stacked">User ID</ion-label>
-                        <ion-input v-model="userId" placeholder="e.g., alice, bob, charlie"
-                            :disabled="isConnected"></ion-input>
-                    </ion-item>
+                <!-- Subscribe & Publish Grid -->
+                <ion-grid>
+                    <ion-row>
+                        <!-- Subscribe Section -->
+                        <ion-col size="12" size-lg="6">
+                            <ion-card>
+                                <ion-card-header>
+                                    <ion-card-title>📥 Subscribe</ion-card-title>
+                                </ion-card-header>
+                                <ion-card-content>
+                                    <ion-item>
+                                        <ion-label position="stacked">Topic</ion-label>
+                                        <ion-input v-model="subscribeTopic" placeholder="sf/sensors/#"></ion-input>
+                                    </ion-item>
 
-                    <ion-item>
-                        <ion-label position="stacked">WebSocket URL</ion-label>
-                        <ion-input v-model="wsUrl" placeholder="ws://localhost:8000/ws/ws"
-                            :disabled="isConnected"></ion-input>
-                    </ion-item>
+                                    <ion-item>
+                                        <ion-label position="stacked">QoS Level</ion-label>
+                                        <ion-select v-model="subscribeQos" interface="popover">
+                                            <ion-select-option :value="0">QoS 0</ion-select-option>
+                                            <ion-select-option :value="1">QoS 1</ion-select-option>
+                                            <ion-select-option :value="2">QoS 2</ion-select-option>
+                                        </ion-select>
+                                    </ion-item>
 
-                    <ion-button expand="block" @click="connect" :disabled="isConnected" class="ion-margin-top">
-                        Connect
-                    </ion-button>
-                    <ion-button expand="block" color="danger" @click="disconnect" :disabled="!isConnected">
-                        Disconnect
-                    </ion-button>
-                </ion-card-content>
-            </ion-card>
+                                    <ion-button expand="block" @click="subscribe" :disabled="!isConnected"
+                                        class="ion-margin-top">
+                                        <ion-icon :icon="addCircleOutline" slot="start"></ion-icon>
+                                        Subscribe
+                                    </ion-button>
 
-            <!-- Subscribe Section -->
-            <ion-card>
-                <ion-card-header>
-                    <ion-card-title>📥 Subscribe</ion-card-title>
-                </ion-card-header>
-                <ion-card-content>
-                    <ion-item>
-                        <ion-label position="stacked">Topic</ion-label>
-                        <ion-input v-model="subscribeTopic" placeholder="e.g., sf/sensors/#"></ion-input>
-                    </ion-item>
+                                    <!-- Active Subscriptions -->
+                                    <div v-if="subscribedTopics.length > 0" class="ion-margin-top">
+                                        <ion-label class="subscriptions-label">Active Subscriptions:</ion-label>
+                                        <ion-chip v-for="topic in subscribedTopics" :key="topic" color="primary"
+                                            @click="unsubscribe(topic)">
+                                            <ion-label>{{ topic }}</ion-label>
+                                            <ion-icon :icon="closeCircleOutline"></ion-icon>
+                                        </ion-chip>
+                                    </div>
+                                </ion-card-content>
+                            </ion-card>
+                        </ion-col>
 
-                    <ion-item>
-                        <ion-label>QoS Level</ion-label>
-                        <ion-select v-model="subscribeQos">
-                            <ion-select-option :value="0">QoS 0 - At most once</ion-select-option>
-                            <ion-select-option :value="1">QoS 1 - At least once</ion-select-option>
-                            <ion-select-option :value="2">QoS 2 - Exactly once</ion-select-option>
-                        </ion-select>
-                    </ion-item>
+                        <!-- Publish Section -->
+                        <ion-col size="12" size-lg="6">
+                            <ion-card>
+                                <ion-card-header>
+                                    <ion-card-title>📤 Publish</ion-card-title>
+                                </ion-card-header>
+                                <ion-card-content>
+                                    <ion-item>
+                                        <ion-label position="stacked">Topic</ion-label>
+                                        <ion-input v-model="publishTopic"
+                                            placeholder="sf/sensors/temperature"></ion-input>
+                                    </ion-item>
 
-                    <ion-button expand="block" @click="subscribe" :disabled="!isConnected" class="ion-margin-top">
-                        Subscribe
-                    </ion-button>
+                                    <ion-item>
+                                        <ion-label position="stacked">Payload (JSON)</ion-label>
+                                        <ion-textarea v-model="publishPayload" :rows="3"
+                                            placeholder='{"value": 25.5}'></ion-textarea>
+                                    </ion-item>
 
-                    <ion-list v-if="subscribedTopics.length > 0" class="ion-margin-top">
-                        <ion-list-header>
-                            <ion-label>Active Subscriptions</ion-label>
-                        </ion-list-header>
-                        <ion-item v-for="topic in subscribedTopics" :key="topic">
-                            <ion-label>{{ topic }}</ion-label>
-                            <ion-button slot="end" size="small" color="danger" @click="unsubscribe(topic)">
-                                Unsubscribe
+                                    <ion-grid class="ion-no-padding">
+                                        <ion-row>
+                                            <ion-col size="8">
+                                                <ion-item>
+                                                    <ion-label position="stacked">QoS</ion-label>
+                                                    <ion-select v-model="publishQos" interface="popover">
+                                                        <ion-select-option :value="0">QoS 0</ion-select-option>
+                                                        <ion-select-option :value="1">QoS 1</ion-select-option>
+                                                        <ion-select-option :value="2">QoS 2</ion-select-option>
+                                                    </ion-select>
+                                                </ion-item>
+                                            </ion-col>
+                                            <ion-col size="4">
+                                                <ion-item lines="none">
+                                                    <ion-label position="stacked">Retain</ion-label>
+                                                    <ion-toggle v-model="publishRetain"
+                                                        class="ion-margin-top"></ion-toggle>
+                                                </ion-item>
+                                            </ion-col>
+                                        </ion-row>
+                                    </ion-grid>
+
+                                    <ion-button expand="block" @click="publish" :disabled="!isConnected"
+                                        class="ion-margin-top">
+                                        <ion-icon :icon="sendOutline" slot="start"></ion-icon>
+                                        Publish
+                                    </ion-button>
+                                </ion-card-content>
+                            </ion-card>
+                        </ion-col>
+                    </ion-row>
+                </ion-grid>
+
+                <!-- Quick Actions -->
+                <ion-card>
+                    <ion-card-header>
+                        <ion-card-title>⚡ Quick Actions</ion-card-title>
+                    </ion-card-header>
+                    <ion-card-content>
+                        <ion-grid>
+                            <ion-row>
+                                <ion-col size="6" size-md="3">
+                                    <ion-button expand="block" fill="outline" @click="subscribeToAllStatus"
+                                        :disabled="!isConnected">
+                                        All Status
+                                    </ion-button>
+                                </ion-col>
+                                <ion-col size="6" size-md="3">
+                                    <ion-button expand="block" fill="outline" @click="subscribeToSensors"
+                                        :disabled="!isConnected">
+                                        All Sensors
+                                    </ion-button>
+                                </ion-col>
+                                <ion-col size="6" size-md="3">
+                                    <ion-button expand="block" fill="outline" @click="subscribeToBackendStatus"
+                                        :disabled="!isConnected">
+                                        Backend Status
+                                    </ion-button>
+                                </ion-col>
+                                <ion-col size="6" size-md="3">
+                                    <ion-button expand="block" fill="outline" @click="publishTestSensorData"
+                                        :disabled="!isConnected">
+                                        Test Publish
+                                    </ion-button>
+                                </ion-col>
+                            </ion-row>
+                        </ion-grid>
+                    </ion-card-content>
+                </ion-card>
+
+                <!-- Messages Log -->
+                <ion-card>
+                    <ion-card-header>
+                        <ion-card-title>
+                            💬 Messages ({{ messages.length }})
+                            <ion-button size="small" fill="clear" @click="clearMessages" class="ion-float-right">
+                                <ion-icon :icon="trashOutline"></ion-icon>
                             </ion-button>
-                        </ion-item>
-                    </ion-list>
-                </ion-card-content>
-            </ion-card>
-
-            <!-- Publish Section -->
-            <ion-card>
-                <ion-card-header>
-                    <ion-card-title>📤 Publish</ion-card-title>
-                </ion-card-header>
-                <ion-card-content>
-                    <ion-item>
-                        <ion-label position="stacked">Topic</ion-label>
-                        <ion-input v-model="publishTopic" placeholder="e.g., sf/sensors/temperature"></ion-input>
-                    </ion-item>
-
-                    <ion-item>
-                        <ion-label position="stacked">Payload (JSON)</ion-label>
-                        <ion-textarea v-model="publishPayload" :rows="4"
-                            placeholder='{"value": 25.5, "unit": "C"}'></ion-textarea>
-                    </ion-item>
-
-                    <ion-item>
-                        <ion-label>QoS Level</ion-label>
-                        <ion-select v-model="publishQos">
-                            <ion-select-option :value="0">QoS 0 - At most once</ion-select-option>
-                            <ion-select-option :value="1">QoS 1 - At least once</ion-select-option>
-                            <ion-select-option :value="2">QoS 2 - Exactly once</ion-select-option>
-                        </ion-select>
-                    </ion-item>
-
-                    <ion-item>
-                        <ion-label>Retain Message</ion-label>
-                        <ion-toggle v-model="publishRetain"></ion-toggle>
-                    </ion-item>
-
-                    <ion-button expand="block" @click="publish" :disabled="!isConnected" class="ion-margin-top">
-                        Publish
-                    </ion-button>
-                </ion-card-content>
-            </ion-card>
-
-            <!-- Quick Actions -->
-            <ion-card>
-                <ion-card-header>
-                    <ion-card-title>⚡ Quick Actions</ion-card-title>
-                </ion-card-header>
-                <ion-card-content>
-                    <ion-button expand="block" @click="subscribeToAllStatus" :disabled="!isConnected">
-                        Monitor All Status Topics
-                    </ion-button>
-                    <ion-button expand="block" @click="subscribeToSensors" :disabled="!isConnected">
-                        Monitor All Sensors (sf/sensors/#)
-                    </ion-button>
-                    <ion-button expand="block" @click="subscribeToBackendStatus" :disabled="!isConnected">
-                        Monitor Backend Status
-                    </ion-button>
-                    <ion-button expand="block" @click="publishTestSensorData" :disabled="!isConnected">
-                        Publish Test Sensor Data
-                    </ion-button>
-                </ion-card-content>
-            </ion-card>
-
-            <!-- Messages Log -->
-            <ion-card>
-                <ion-card-header>
-                    <ion-card-title>
-                        💬 Messages ({{ messages.length }})
-                        <ion-button size="small" fill="outline" @click="clearMessages" class="ion-float-right">
-                            Clear
-                        </ion-button>
-                    </ion-card-title>
-                </ion-card-header>
-                <ion-card-content>
-                    <div class="messages-container">
-                        <div v-for="(msg, index) in messages" :key="index" :class="['message', msg.type]">
-                            <div class="message-header">
-                                <span class="timestamp">{{ msg.timestamp }}</span>
-                                <ion-chip v-if="msg.qos !== undefined" size="small" color="primary">
-                                    QoS {{ msg.qos }}
-                                </ion-chip>
+                        </ion-card-title>
+                    </ion-card-header>
+                    <ion-card-content>
+                        <div class="messages-container">
+                            <div v-for="(msg, index) in messages" :key="index" :class="['message', msg.type]">
+                                <div class="message-header">
+                                    <span class="timestamp">{{ msg.timestamp }}</span>
+                                    <ion-chip v-if="msg.qos !== undefined" size="small" color="secondary">
+                                        QoS {{ msg.qos }}
+                                    </ion-chip>
+                                </div>
+                                <div v-if="msg.topic" class="topic">{{ msg.topic }}</div>
+                                <div class="payload">{{ msg.payload }}</div>
                             </div>
-                            <div v-if="msg.topic" class="topic">{{ msg.topic }}</div>
-                            <div class="payload">{{ msg.payload }}</div>
+                            <div v-if="messages.length === 0" class="no-messages">
+                                <ion-icon :icon="chatbubbleEllipsesOutline" size="large"></ion-icon>
+                                <p>No messages yet. Connect and subscribe to see messages.</p>
+                            </div>
                         </div>
-                        <div v-if="messages.length === 0" class="no-messages">
-                            No messages yet. Connect and subscribe to topics to see messages.
+                    </ion-card-content>
+                </ion-card>
+            </div>
+
+            <!-- ACL Management Tab -->
+            <div v-if="activeTab === 'acl'">
+                <!-- ACL Info Card -->
+                <ion-card>
+                    <ion-card-header>
+                        <ion-card-title>
+                            🔒 ACL Information
+                            <ion-button size="small" fill="clear" @click="loadAclInfo" class="ion-float-right">
+                                <ion-icon :icon="refreshOutline"></ion-icon>
+                            </ion-button>
+                        </ion-card-title>
+                    </ion-card-header>
+                    <ion-card-content>
+                        <ion-grid v-if="aclInfo">
+                            <ion-row>
+                                <ion-col size="6" size-md="3">
+                                    <div class="stat-card">
+                                        <div class="stat-value">{{ aclInfo.total_users }}</div>
+                                        <div class="stat-label">Total Users</div>
+                                    </div>
+                                </ion-col>
+                                <ion-col size="6" size-md="3">
+                                    <div class="stat-card">
+                                        <div class="stat-value">{{ aclInfo.total_roles }}</div>
+                                        <div class="stat-label">Total Roles</div>
+                                    </div>
+                                </ion-col>
+                                <ion-col size="6" size-md="3">
+                                    <div class="stat-card">
+                                        <div class="stat-value">{{ aclInfo.default_policy }}</div>
+                                        <div class="stat-label">Default Policy</div>
+                                    </div>
+                                </ion-col>
+                                <ion-col size="6" size-md="3">
+                                    <div class="stat-card">
+                                        <div class="stat-value">{{ aclInfo.version }}</div>
+                                        <div class="stat-label">Version</div>
+                                    </div>
+                                </ion-col>
+                            </ion-row>
+                        </ion-grid>
+                    </ion-card-content>
+                </ion-card>
+
+                <!-- Create User Card -->
+                <ion-card>
+                    <ion-card-header>
+                        <ion-card-title>➕ Create New User</ion-card-title>
+                    </ion-card-header>
+                    <ion-card-content>
+                        <ion-item>
+                            <ion-label position="stacked">User ID</ion-label>
+                            <ion-input v-model="newUser.userId" placeholder="john_doe"></ion-input>
+                        </ion-item>
+
+                        <ion-item>
+                            <ion-label position="stacked">Roles</ion-label>
+                            <ion-select v-model="newUser.roles" multiple placeholder="Select roles">
+                                <ion-select-option v-for="role in availableRoles" :key="role" :value="role">
+                                    {{ role }}
+                                </ion-select-option>
+                            </ion-select>
+                        </ion-item>
+
+                        <ion-button expand="block" @click="createUser" class="ion-margin-top">
+                            <ion-icon :icon="personAddOutline" slot="start"></ion-icon>
+                            Create User
+                        </ion-button>
+                    </ion-card-content>
+                </ion-card>
+
+                <!-- Available Roles Card -->
+                <ion-card>
+                    <ion-card-header>
+                        <ion-card-title>👥 Available Roles</ion-card-title>
+                    </ion-card-header>
+                    <ion-card-content>
+                        <ion-list>
+                            <ion-item v-for="(roleData, roleName) in rolesData" :key="roleName">
+                                <ion-label>
+                                    <h2>{{ roleName }}</h2>
+                                    <p>{{ roleData.description }}</p>
+                                    <ion-chip v-for="(perm, idx) in roleData.permissions" :key="idx" color="tertiary"
+                                        size="small">
+                                        {{ perm.pattern }}: {{ perm.allow.join(', ') }}
+                                    </ion-chip>
+                                </ion-label>
+                            </ion-item>
+                        </ion-list>
+                    </ion-card-content>
+                </ion-card>
+
+                <!-- Users List Card -->
+                <ion-card>
+                    <ion-card-header>
+                        <ion-card-title>
+                            👤 Users ({{ usersList.length }})
+                            <ion-button size="small" fill="clear" @click="loadUsers" class="ion-float-right">
+                                <ion-icon :icon="refreshOutline"></ion-icon>
+                            </ion-button>
+                        </ion-card-title>
+                    </ion-card-header>
+                    <ion-card-content>
+                        <ion-list>
+                            <ion-item v-for="user in usersList" :key="user.user_id">
+                                <ion-label>
+                                    <h2>{{ user.user_id }}</h2>
+                                    <p>
+                                        <ion-chip v-for="role in user.roles" :key="role" color="primary" size="small">
+                                            {{ role }}
+                                        </ion-chip>
+                                    </p>
+                                </ion-label>
+                                <ion-button slot="end" fill="clear" @click="showUserDetails(user)">
+                                    <ion-icon :icon="informationCircleOutline"></ion-icon>
+                                </ion-button>
+                                <ion-button slot="end" fill="clear" color="danger" @click="deleteUser(user.user_id)">
+                                    <ion-icon :icon="trashOutline"></ion-icon>
+                                </ion-button>
+                            </ion-item>
+                        </ion-list>
+                    </ion-card-content>
+                </ion-card>
+
+                <!-- Permission Checker Card -->
+                <ion-card>
+                    <ion-card-header>
+                        <ion-card-title>🔍 Check Permissions</ion-card-title>
+                    </ion-card-header>
+                    <ion-card-content>
+                        <ion-item>
+                            <ion-label position="stacked">User ID</ion-label>
+                            <ion-input v-model="permCheck.userId" placeholder="alice"></ion-input>
+                        </ion-item>
+
+                        <ion-item>
+                            <ion-label position="stacked">Topic</ion-label>
+                            <ion-input v-model="permCheck.topic" placeholder="sf/sensors/temperature"></ion-input>
+                        </ion-item>
+
+                        <ion-item>
+                            <ion-label position="stacked">Action</ion-label>
+                            <ion-select v-model="permCheck.action">
+                                <ion-select-option value="subscribe">Subscribe</ion-select-option>
+                                <ion-select-option value="publish">Publish</ion-select-option>
+                            </ion-select>
+                        </ion-item>
+
+                        <ion-button expand="block" @click="checkPermission" class="ion-margin-top">
+                            <ion-icon :icon="checkmarkCircleOutline" slot="start"></ion-icon>
+                            Check Permission
+                        </ion-button>
+
+                        <div v-if="permCheckResult" class="ion-margin-top">
+                            <ion-chip :color="permCheckResult.allowed ? 'success' : 'danger'">
+                                <ion-icon
+                                    :icon="permCheckResult.allowed ? checkmarkCircleOutline : closeCircleOutline"></ion-icon>
+                                <ion-label>{{ permCheckResult.allowed ? 'ALLOWED' : 'DENIED' }}</ion-label>
+                            </ion-chip>
                         </div>
-                    </div>
-                </ion-card-content>
-            </ion-card>
+                    </ion-card-content>
+                </ion-card>
+            </div>
         </ion-content>
     </ion-page>
 </template>
 
-<script setup lang="ts">
-import { ref, computed } from 'vue';
+<script setup>
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import {
     IonPage,
     IonHeader,
@@ -188,13 +418,31 @@ import {
     IonSelectOption,
     IonToggle,
     IonList,
-    IonListHeader,
+    IonButtons,
+    IonBackButton,
+    IonGrid,
+    IonRow,
+    IonCol,
+    IonIcon,
     alertController,
     toastController,
 } from '@ionic/vue';
+import {
+    powerOutline,
+    closeCircleOutline,
+    addCircleOutline,
+    sendOutline,
+    trashOutline,
+    chatbubbleEllipsesOutline,
+    refreshOutline,
+    personAddOutline,
+    informationCircleOutline,
+    checkmarkCircleOutline,
+} from 'ionicons/icons';
+import webSocketService from '@/services/websocket';
 
 // State
-const ws = ref<WebSocket | null>(null);
+const activeTab = ref('mqtt');
 const userId = ref('alice');
 const wsUrl = ref('ws://localhost:8000/ws/ws');
 const isConnected = ref(false);
@@ -203,24 +451,38 @@ const connectionStatus = ref('Disconnected');
 // Subscribe state
 const subscribeTopic = ref('sf/sensors/#');
 const subscribeQos = ref(1);
-const subscribedTopics = ref<string[]>([]);
+const subscribedTopics = ref([]);
 
 // Publish state
 const publishTopic = ref('sf/sensors/temperature');
-const publishPayload = ref('{\n  "value": 25.5,\n  "unit": "C",\n  "timestamp": "' + new Date().toISOString() + '"\n}');
+const publishPayload = ref('{\n  "value": 25.5,\n  "unit": "C"\n}');
 const publishQos = ref(1);
 const publishRetain = ref(false);
 
 // Messages
-interface Message {
-    timestamp: string;
-    type: 'sent' | 'received' | 'system' | 'error';
-    topic?: string;
-    payload: string;
-    qos?: number;
-}
+const messages = ref([]);
 
-const messages = ref<Message[]>([]);
+// ACL State
+const aclInfo = ref(null);
+const usersList = ref([]);
+const rolesData = ref({});
+const availableRoles = ref([]);
+
+const newUser = ref({
+    userId: '',
+    roles: [],
+});
+
+const permCheck = ref({
+    userId: '',
+    topic: '',
+    action: 'subscribe',
+});
+
+const permCheckResult = ref(null);
+
+// API Base URL
+const API_BASE = 'http://localhost:8000';
 
 // Computed
 const statusColor = computed(() => {
@@ -230,8 +492,8 @@ const statusColor = computed(() => {
 });
 
 // Methods
-const addMessage = (type: Message['type'], content: Partial<Message>) => {
-    const msg: Message = {
+const addMessage = (type, content) => {
+    const msg = {
         timestamp: new Date().toLocaleTimeString(),
         type,
         payload: content.payload || content.topic || '',
@@ -239,13 +501,12 @@ const addMessage = (type: Message['type'], content: Partial<Message>) => {
     };
     messages.value.push(msg);
 
-    // Keep only last 100 messages
     if (messages.value.length > 100) {
         messages.value.shift();
     }
 };
 
-const showToast = async (message: string, color: string = 'primary') => {
+const showToast = async (message, color = 'primary') => {
     const toast = await toastController.create({
         message,
         duration: 2000,
@@ -255,7 +516,73 @@ const showToast = async (message: string, color: string = 'primary') => {
     await toast.present();
 };
 
-const connect = () => {
+// WebSocket event handlers
+const handleConnectionStatus = (data) => {
+    if (data.status === 'connected') {
+        isConnected.value = true;
+        connectionStatus.value = 'Connected';
+        addMessage('system', { payload: `✓ Connected as ${data.user_id}` });
+        showToast('Connected successfully', 'success');
+    } else if (data.status === 'disconnected') {
+        isConnected.value = false;
+        connectionStatus.value = 'Disconnected';
+        subscribedTopics.value = [];
+        addMessage('system', { payload: '✗ Disconnected from WebSocket' });
+        showToast('Disconnected', 'warning');
+    } else if (data.status === 'error') {
+        isConnected.value = false;
+        connectionStatus.value = 'Error';
+        addMessage('error', { payload: 'WebSocket error occurred' });
+        showToast('Connection error', 'danger');
+    }
+};
+
+const handleSensorData = (data) => {
+    addMessage('received', {
+        topic: data.topic,
+        qos: data.qos,
+        payload: JSON.stringify(data.data, null, 2),
+    });
+};
+
+const handleMqttStatus = (data) => {
+    addMessage('system', {
+        payload: `MQTT Status: ${data.status} - ${data.message}`,
+    });
+};
+
+const handlePublishAck = (data) => {
+    addMessage(data.status === 'success' ? 'sent' : 'error', {
+        topic: data.topic,
+        qos: data.qos,
+        payload: `Publish ${data.status}`,
+    });
+};
+
+const handleSubscriptionAck = (data) => {
+    subscribedTopics.value = data.current_subscriptions || [];
+    addMessage('system', {
+        payload: `Subscribed to: ${data.topics?.join(', ')}`,
+    });
+};
+
+const handleUnsubscriptionAck = (data) => {
+    subscribedTopics.value = data.current_subscriptions || [];
+    addMessage('system', {
+        payload: `Unsubscribed from: ${data.topics?.join(', ')}`,
+    });
+};
+
+const handlePermissionRevoked = (data) => {
+    addMessage('error', {
+        topic: data.topic,
+        payload: `Permission revoked: ${data.message}`,
+    });
+    showToast(`Permission revoked for ${data.topic}`, 'danger');
+};
+
+// WebSocket connection methods
+const connect = async () => {
     if (!userId.value.trim()) {
         showToast('Please enter a User ID', 'danger');
         return;
@@ -264,120 +591,37 @@ const connect = () => {
     connectionStatus.value = 'Connecting...';
     addMessage('system', { payload: `Connecting as user: ${userId.value}` });
 
-    const url = `${wsUrl.value}?user_id=${userId.value}`;
-    ws.value = new WebSocket(url);
-
-    ws.value.onopen = () => {
-        isConnected.value = true;
-        connectionStatus.value = 'Connected';
-        addMessage('system', { payload: `✓ Connected as ${userId.value}` });
-        showToast('Connected successfully', 'success');
-    };
-
-    ws.value.onmessage = (event) => {
-        try {
-            const data = JSON.parse(event.data);
-
-            if (data.type === 'sensor_data') {
-                addMessage('received', {
-                    topic: data.topic,
-                    qos: data.qos,
-                    payload: JSON.stringify(data.data, null, 2),
-                });
-            } else if (data.type === 'mqtt_status') {
-                addMessage('system', {
-                    payload: `MQTT Status: ${data.status} - ${data.message}`,
-                });
-                if (data.qos !== undefined) {
-                    addMessage('system', {
-                        payload: `Your QoS level: ${data.qos}`,
-                    });
-                }
-            } else if (data.type === 'publish_ack') {
-                addMessage(data.status === 'success' ? 'sent' : 'error', {
-                    topic: data.topic,
-                    qos: data.qos,
-                    payload: `Publish ${data.status}`,
-                });
-            } else if (data.type === 'subscription_ack') {
-                subscribedTopics.value = data.current_subscriptions || [];
-                addMessage('system', {
-                    payload: `Subscribed to: ${data.topics?.join(', ')}`,
-                });
-            } else if (data.type === 'unsubscription_ack') {
-                subscribedTopics.value = data.current_subscriptions || [];
-                addMessage('system', {
-                    payload: `Unsubscribed from: ${data.topics?.join(', ')}`,
-                });
-            } else if (data.type === 'permission_revoked') {
-                addMessage('error', {
-                    topic: data.topic,
-                    payload: `Permission revoked: ${data.message}`,
-                });
-                showToast(`Permission revoked for ${data.topic}`, 'danger');
-            } else {
-                addMessage('system', {
-                    payload: JSON.stringify(data, null, 2),
-                });
-            }
-        } catch (e) {
-            addMessage('error', { payload: 'Failed to parse message: ' + event.data });
-        }
-    };
-
-    ws.value.onerror = () => {
-        addMessage('error', { payload: 'WebSocket error occurred' });
-        showToast('WebSocket error', 'danger');
-    };
-
-    ws.value.onclose = () => {
-        isConnected.value = false;
-        connectionStatus.value = 'Disconnected';
-        subscribedTopics.value = [];
-        addMessage('system', { payload: '✗ Disconnected from WebSocket' });
-        showToast('Disconnected', 'warning');
-    };
-};
-
-const disconnect = () => {
-    if (ws.value) {
-        ws.value.close();
-        ws.value = null;
+    try {
+        await webSocketService.connect(wsUrl.value, userId.value);
+    } catch (error) {
+        connectionStatus.value = 'Error';
+        addMessage('error', { payload: 'Failed to connect' });
+        showToast('Failed to connect', 'danger');
     }
 };
 
+const disconnect = () => {
+    webSocketService.disconnect();
+};
+
+// MQTT operations
 const subscribe = () => {
     if (!subscribeTopic.value.trim()) {
         showToast('Please enter a topic', 'danger');
         return;
     }
 
-    if (ws.value && ws.value.readyState === WebSocket.OPEN) {
-        ws.value.send(
-            JSON.stringify({
-                type: 'subscribe',
-                topics: [subscribeTopic.value],
-                qos: subscribeQos.value,
-            })
-        );
-        addMessage('system', {
-            payload: `Subscribing to: ${subscribeTopic.value} (QoS ${subscribeQos.value})`,
-        });
-    }
+    webSocketService.subscribeMQTT(subscribeTopic.value, subscribeQos.value);
+    addMessage('system', {
+        payload: `Subscribing to: ${subscribeTopic.value} (QoS ${subscribeQos.value})`,
+    });
 };
 
-const unsubscribe = (topic: string) => {
-    if (ws.value && ws.value.readyState === WebSocket.OPEN) {
-        ws.value.send(
-            JSON.stringify({
-                type: 'unsubscribe',
-                topics: [topic],
-            })
-        );
-        addMessage('system', {
-            payload: `Unsubscribing from: ${topic}`,
-        });
-    }
+const unsubscribe = (topic) => {
+    webSocketService.unsubscribeMQTT(topic);
+    addMessage('system', {
+        payload: `Unsubscribing from: ${topic}`,
+    });
 };
 
 const publish = async () => {
@@ -386,7 +630,6 @@ const publish = async () => {
         return;
     }
 
-    // Validate JSON
     try {
         JSON.parse(publishPayload.value);
     } catch {
@@ -395,12 +638,7 @@ const publish = async () => {
             message: 'Payload is not valid JSON. Send anyway?',
             buttons: [
                 { text: 'Cancel', role: 'cancel' },
-                {
-                    text: 'Send',
-                    handler: () => {
-                        performPublish();
-                    },
-                },
+                { text: 'Send', handler: () => performPublish() },
             ],
         });
         await alert.present();
@@ -411,27 +649,22 @@ const publish = async () => {
 };
 
 const performPublish = () => {
-    if (ws.value && ws.value.readyState === WebSocket.OPEN) {
-        ws.value.send(
-            JSON.stringify({
-                type: 'publish',
-                topic: publishTopic.value,
-                payload: publishPayload.value,
-                qos: publishQos.value,
-                retain: publishRetain.value,
-            })
-        );
-        addMessage('sent', {
-            topic: publishTopic.value,
-            qos: publishQos.value,
-            payload: publishPayload.value,
-        });
-    }
+    webSocketService.publishMQTT(
+        publishTopic.value,
+        publishPayload.value,
+        publishQos.value,
+        publishRetain.value
+    );
+    addMessage('sent', {
+        topic: publishTopic.value,
+        qos: publishQos.value,
+        payload: publishPayload.value,
+    });
 };
 
 // Quick Actions
 const subscribeToAllStatus = () => {
-    subscribeTopic.value = 'factory/+/status';
+    subscribeTopic.value = 'sf/+/status';
     subscribeQos.value = 1;
     subscribe();
 };
@@ -443,7 +676,7 @@ const subscribeToSensors = () => {
 };
 
 const subscribeToBackendStatus = () => {
-    subscribeTopic.value = 'factory/backend/status';
+    subscribeTopic.value = 'sf/backend/status';
     subscribeQos.value = 1;
     subscribe();
 };
@@ -467,11 +700,201 @@ const clearMessages = () => {
     messages.value = [];
     addMessage('system', { payload: 'Messages cleared' });
 };
+
+// ACL Methods
+const loadAclInfo = async () => {
+    try {
+        const response = await fetch(`${API_BASE}/api/acl/info`);
+        aclInfo.value = await response.json();
+        showToast('ACL info loaded', 'success');
+    } catch (error) {
+        showToast('Failed to load ACL info', 'danger');
+    }
+};
+
+const loadRoles = async () => {
+    try {
+        const response = await fetch(`${API_BASE}/api/acl/roles`);
+        const data = await response.json();
+        rolesData.value = data.roles;
+        availableRoles.value = Object.keys(data.roles);
+    } catch (error) {
+        showToast('Failed to load roles', 'danger');
+    }
+};
+
+const loadUsers = async () => {
+    try {
+        const response = await fetch(`${API_BASE}/api/acl/users`);
+        const data = await response.json();
+        usersList.value = data.users;
+    } catch (error) {
+        showToast('Failed to load users', 'danger');
+    }
+};
+
+const createUser = async () => {
+    if (!newUser.value.userId || newUser.value.roles.length === 0) {
+        showToast('Please enter user ID and select at least one role', 'danger');
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_BASE}/api/acl/users`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                user_id: newUser.value.userId,
+                roles: newUser.value.roles,
+                custom_permissions: [],
+            }),
+        });
+
+        if (response.ok) {
+            showToast(`User ${newUser.value.userId} created successfully`, 'success');
+            newUser.value = { userId: '', roles: [] };
+            loadUsers();
+            loadAclInfo();
+        } else {
+            const error = await response.json();
+            showToast(error.detail || 'Failed to create user', 'danger');
+        }
+    } catch (error) {
+        showToast('Failed to create user', 'danger');
+    }
+};
+
+const deleteUser = async (userId) => {
+    const alert = await alertController.create({
+        header: 'Delete User',
+        message: `Are you sure you want to delete user "${userId}"?`,
+        buttons: [
+            { text: 'Cancel', role: 'cancel' },
+            {
+                text: 'Delete',
+                role: 'destructive',
+                handler: async () => {
+                    try {
+                        const response = await fetch(`${API_BASE}/api/acl/users/${userId}`, {
+                            method: 'DELETE',
+                        });
+
+                        if (response.ok) {
+                            showToast(`User ${userId} deleted`, 'success');
+                            loadUsers();
+                            loadAclInfo();
+                        } else {
+                            showToast('Failed to delete user', 'danger');
+                        }
+                    } catch (error) {
+                        showToast('Failed to delete user', 'danger');
+                    }
+                },
+            },
+        ],
+    });
+    await alert.present();
+};
+
+const showUserDetails = async (user) => {
+    const alert = await alertController.create({
+        header: `User: ${user.user_id}`,
+        message: `
+      <strong>Roles:</strong> ${user.roles.join(', ')}<br><br>
+      <strong>Permissions:</strong> ${user.permissions.length} permission(s)
+    `,
+        buttons: ['OK'],
+    });
+    await alert.present();
+};
+
+const checkPermission = async () => {
+    if (!permCheck.value.userId || !permCheck.value.topic || !permCheck.value.action) {
+        showToast('Please fill all fields', 'danger');
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_BASE}/api/acl/check`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                user_id: permCheck.value.userId,
+                topic: permCheck.value.topic,
+                action: permCheck.value.action,
+            }),
+        });
+
+        if (response.ok) {
+            permCheckResult.value = await response.json();
+        } else {
+            showToast('Failed to check permission', 'danger');
+        }
+    } catch (error) {
+        showToast('Failed to check permission', 'danger');
+    }
+};
+
+// Lifecycle
+onMounted(() => {
+    // Register WebSocket event handlers
+    webSocketService.on('connection_status', handleConnectionStatus);
+    webSocketService.on('sensor_data', handleSensorData);
+    webSocketService.on('mqtt_status', handleMqttStatus);
+    webSocketService.on('publish_ack', handlePublishAck);
+    webSocketService.on('subscription_ack', handleSubscriptionAck);
+    webSocketService.on('unsubscription_ack', handleUnsubscriptionAck);
+    webSocketService.on('permission_revoked', handlePermissionRevoked);
+
+    // Load ACL data
+    loadAclInfo();
+    loadRoles();
+    loadUsers();
+});
+
+onUnmounted(() => {
+    // Unregister WebSocket event handlers
+    webSocketService.off('connection_status', handleConnectionStatus);
+    webSocketService.off('sensor_data', handleSensorData);
+    webSocketService.off('mqtt_status', handleMqttStatus);
+    webSocketService.off('publish_ack', handlePublishAck);
+    webSocketService.off('subscription_ack', handleSubscriptionAck);
+    webSocketService.off('unsubscription_ack', handleUnsubscriptionAck);
+    webSocketService.off('permission_revoked', handlePermissionRevoked);
+});
 </script>
 
 <style scoped>
+.active-tab {
+    --background: rgba(255, 255, 255, 0.2);
+}
+
+/* Fix ion-item spacing for stacked labels */
+ion-item {
+    --padding-top: 8px;
+    --padding-bottom: 8px;
+    --inner-padding-end: 0;
+}
+
+ion-item ion-label[position="stacked"] {
+    margin-bottom: 8px;
+    font-weight: 500;
+    font-size: 0.875rem;
+}
+
+ion-item ion-input,
+ion-item ion-textarea,
+ion-item ion-select {
+    margin-top: 4px;
+}
+
+/* Ensure toggle has proper spacing */
+ion-toggle {
+    margin-top: 8px;
+}
+
 .messages-container {
-    max-height: 500px;
+    max-height: 400px;
     overflow-y: auto;
     background: var(--ion-color-light);
     border-radius: 8px;
@@ -533,13 +956,68 @@ const clearMessages = () => {
 
 .no-messages {
     text-align: center;
-    padding: 40px 20px;
+    padding: 60px 20px;
     color: var(--ion-color-medium);
 }
 
+.no-messages ion-icon {
+    font-size: 64px;
+    opacity: 0.5;
+}
+
+.no-messages p {
+    margin-top: 16px;
+    font-size: 0.95em;
+}
+
+.subscriptions-label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 600;
+    color: var(--ion-color-dark);
+}
+
+.stat-card {
+    background: var(--ion-color-light);
+    padding: 20px;
+    border-radius: 8px;
+    text-align: center;
+}
+
+.stat-value {
+    font-size: 2em;
+    font-weight: bold;
+    color: var(--ion-color-primary);
+    margin-bottom: 8px;
+}
+
+.stat-label {
+    font-size: 0.9em;
+    color: var(--ion-color-medium);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
 ion-chip {
-    margin: 0;
-    padding: 4px 8px;
-    height: auto;
+    margin: 4px;
+    cursor: pointer;
+}
+
+ion-card {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+ion-card-title {
+    font-size: 1.2em;
+}
+
+@media (max-width: 768px) {
+    .stat-value {
+        font-size: 1.5em;
+    }
+
+    .messages-container {
+        max-height: 300px;
+    }
 }
 </style>

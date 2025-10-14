@@ -20,6 +20,12 @@
                 </ion-chip>
             </div>
 
+            <ion-fab vertical="bottom" horizontal="end" slot="fixed">
+                <ion-fab-button @click="openMQTTTest">
+                    <ion-icon :icon="settingsOutline"></ion-icon>
+                </ion-fab-button>
+            </ion-fab>
+
             <!-- Loading indicator -->
             <div v-if="isLoading" class="loading-container">
                 <ion-spinner name="crescent"></ion-spinner>
@@ -216,10 +222,10 @@ import {
     IonPage, IonHeader, IonToolbar, IonTitle, IonContent, IonButtons, IonButton,
     IonIcon, IonCard, IonCardContent, IonCardHeader, IonCardTitle, IonList,
     IonItem, IonLabel, IonChip, IonSpinner, IonAlert, IonAvatar, IonModal,
-    IonInput, IonSelect, IonSelectOption
+    IonInput, IonSelect, IonSelectOption, IonFab, IonFabButton
 } from '@ionic/vue';
 import {
-    refreshOutline, checkmarkCircle, closeCircle, hardwareChip, barChart,
+    refreshOutline, settingsOutline, checkmarkCircle, closeCircle, hardwareChip, barChart,
     time, thermometerOutline, cloudOffline, add, send
 } from 'ionicons/icons';
 import { useIotStore } from '@/stores/iot';
@@ -323,6 +329,10 @@ const sendDeviceCommand = async () => {
     } catch (err) {
         console.error('Failed to send command:', err);
     }
+};
+
+const openMQTTTest = () => {
+    router.push('/mqtt-test');
 };
 
 // Lifecycle

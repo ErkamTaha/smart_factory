@@ -25,6 +25,11 @@ const routes = [
     path: '/settings',
     name: 'Settings',
     component: () => import('@/views/Settings.vue')
+  },
+  {
+    path: '/mqtt-test',
+    name: 'MQTTTest',
+    component: () => import('@/views/MqttTestClient.vue')
   }
 ];
 

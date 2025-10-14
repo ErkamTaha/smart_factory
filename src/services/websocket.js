@@ -3,88 +3,98 @@ class WebSocketService {
         this.ws = null;
         this.reconnectAttempts = 0;
         this.maxReconnectAttempts = 5;
-        this.reconnectDelay = 1000; // Start with 1 second
+        this.reconnectDelay = 1000;
         this.messageHandlers = new Map();
         this.isConnecting = false;
         this.isManuallyDisconnected = false;
+        this.currentUserId = null;
+        this.currentUrl = null;
     }
 
-    connect(url = 'ws://localhost:8000/ws/ws') {
-        if (this.isConnecting || (this.ws && this.ws.readyState === WebSocket.OPEN)) {
-            console.log('WebSocket already connected or connecting');
-            return;
-        }
+    connect(url, userId) {
+        return new Promise((resolve, reject) => {
+            if (this.isConnecting || (this.ws && this.ws.readyState === WebSocket.OPEN)) {
+                console.log('WebSocket already connected or connecting');
+                resolve();
+                return;
+            }
 
-        this.isConnecting = true;
-        this.isManuallyDisconnected = false;
+            this.isConnecting = true;
+            this.isManuallyDisconnected = false;
+            this.currentUserId = userId;
+            this.currentUrl = url;
 
-        try {
-            console.log(`Connecting to WebSocket: ${url}`);
-            this.ws = new WebSocket(url);
+            // Add user_id to URL
+            const urlWithUser = `${url}?user_id=${userId}`;
 
-            this.ws.onopen = (event) => {
-                console.log('WebSocket connected successfully');
+            try {
+                console.log(`Connecting to WebSocket: ${urlWithUser}`);
+                this.ws = new WebSocket(urlWithUser);
+
+                this.ws.onopen = (event) => {
+                    console.log('WebSocket connected successfully as user:', userId);
+                    this.isConnecting = false;
+                    this.reconnectAttempts = 0;
+                    this.reconnectDelay = 1000;
+
+                    // Notify handlers about connection
+                    this.notifyHandlers('connection_status', {
+                        status: 'connected',
+                        event: 'open',
+                        user_id: userId
+                    });
+
+                    resolve();
+                };
+
+                this.ws.onmessage = (event) => {
+                    try {
+                        const message = JSON.parse(event.data);
+                        console.log('WebSocket message received:', message);
+                        this.handleMessage(message);
+                    } catch (error) {
+                        console.error('Error parsing WebSocket message:', error);
+                    }
+                };
+
+                this.ws.onclose = (event) => {
+                    console.log('WebSocket connection closed:', event.code, event.reason);
+                    this.isConnecting = false;
+
+                    // Notify handlers about disconnection
+                    this.notifyHandlers('connection_status', {
+                        status: 'disconnected',
+                        event: 'close',
+                        code: event.code,
+                        reason: event.reason
+                    });
+
+                    // Auto-reconnect if not manually disconnected
+                    if (!this.isManuallyDisconnected && this.reconnectAttempts < this.maxReconnectAttempts) {
+                        this.scheduleReconnect();
+                    }
+                };
+
+                this.ws.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                    this.isConnecting = false;
+
+                    // Notify handlers about error
+                    this.notifyHandlers('connection_status', {
+                        status: 'error',
+                        event: 'error',
+                        error: error
+                    });
+
+                    reject(error);
+                };
+
+            } catch (error) {
+                console.error('Failed to create WebSocket connection:', error);
                 this.isConnecting = false;
-                this.reconnectAttempts = 0;
-                this.reconnectDelay = 1000;
-
-                // Send ping to confirm connection
-                this.send({
-                    type: 'ping',
-                    timestamp: new Date().toISOString()
-                });
-
-                // Notify handlers about connection
-                this.notifyHandlers('connection_status', {
-                    status: 'connected',
-                    event: 'open'
-                });
-            };
-
-            this.ws.onmessage = (event) => {
-                try {
-                    const message = JSON.parse(event.data);
-                    console.log('WebSocket message received:', message);
-                    this.handleMessage(message);
-                } catch (error) {
-                    console.error('Error parsing WebSocket message:', error);
-                }
-            };
-
-            this.ws.onclose = (event) => {
-                console.log('WebSocket connection closed:', event.code, event.reason);
-                this.isConnecting = false;
-
-                // Notify handlers about disconnection
-                this.notifyHandlers('connection_status', {
-                    status: 'disconnected',
-                    event: 'close',
-                    code: event.code,
-                    reason: event.reason
-                });
-
-                // Auto-reconnect if not manually disconnected
-                if (!this.isManuallyDisconnected && this.reconnectAttempts < this.maxReconnectAttempts) {
-                    this.scheduleReconnect();
-                }
-            };
-
-            this.ws.onerror = (error) => {
-                console.error('WebSocket error:', error);
-                this.isConnecting = false;
-
-                // Notify handlers about error
-                this.notifyHandlers('connection_status', {
-                    status: 'error',
-                    event: 'error',
-                    error: error
-                });
-            };
-
-        } catch (error) {
-            console.error('Failed to create WebSocket connection:', error);
-            this.isConnecting = false;
-        }
+                reject(error);
+            }
+        });
     }
 
     disconnect() {
@@ -95,6 +105,9 @@ class WebSocketService {
             this.ws.close(1000, 'Manual disconnect');
             this.ws = null;
         }
+
+        this.currentUserId = null;
+        this.currentUrl = null;
     }
 
     scheduleReconnect() {
@@ -104,8 +117,8 @@ class WebSocketService {
         console.log(`Scheduling reconnect attempt ${this.reconnectAttempts} in ${delay}ms`);
 
         setTimeout(() => {
-            if (!this.isManuallyDisconnected) {
-                this.connect();
+            if (!this.isManuallyDisconnected && this.currentUrl && this.currentUserId) {
+                this.connect(this.currentUrl, this.currentUserId);
             }
         }, delay);
     }
@@ -137,24 +150,44 @@ class WebSocketService {
                 console.log('Received pong from server');
                 break;
 
+            case 'connection_status':
+                console.log('Connection status:', message);
+                break;
+
             case 'sensor_data':
-                console.log('Received sensor data:', message.data);
-                this.notifyHandlers('sensor_data', message);
+                console.log('Received sensor data:', message.topic, message.data);
+                break;
+
+            case 'mqtt_status':
+                console.log('MQTT status:', message.status, message.message);
+                break;
+
+            case 'publish_ack':
+                console.log('Publish acknowledgment:', message.topic, message.status);
+                break;
+
+            case 'subscription_ack':
+                console.log('Subscription acknowledgment:', message.topics);
+                break;
+
+            case 'unsubscription_ack':
+                console.log('Unsubscription acknowledgment:', message.topics);
+                break;
+
+            case 'permission_revoked':
+                console.warn('Permission revoked:', message.topic, message.message);
                 break;
 
             case 'system_alert':
-                console.log('Received system alert:', message.message);
-                this.notifyHandlers('system_alert', message);
+                console.log('System alert:', message.level, message.message);
                 break;
 
             case 'device_status':
-                console.log('Received device status:', message);
-                this.notifyHandlers('device_status', message);
+                console.log('Device status:', message);
                 break;
 
             case 'mqtt_publish':
                 console.log('MQTT publish event:', message);
-                this.notifyHandlers('mqtt_publish', message);
                 break;
 
             default:
@@ -181,7 +214,6 @@ class WebSocketService {
             this.messageHandlers.set(messageType, []);
         }
         this.messageHandlers.get(messageType).push(handler);
-
         console.log(`Subscribed to WebSocket message type: ${messageType}`);
     }
 
@@ -223,19 +255,61 @@ class WebSocketService {
         return this.ws && this.ws.readyState === WebSocket.OPEN;
     }
 
-    // Send subscription request to server
-    subscribe(topics) {
+    // MQTT-specific methods
+
+    // Subscribe to MQTT topics
+    subscribeMQTT(topics, qos = 1) {
         this.send({
             type: 'subscribe',
+            topics: Array.isArray(topics) ? topics : [topics],
+            qos: qos
+        });
+    }
+
+    // Unsubscribe from MQTT topics
+    unsubscribeMQTT(topics) {
+        this.send({
+            type: 'unsubscribe',
             topics: Array.isArray(topics) ? topics : [topics]
         });
     }
 
-    // Request server status
-    requestStatus() {
+    // Publish to MQTT topic
+    publishMQTT(topic, payload, qos = 1, retain = false) {
+        this.send({
+            type: 'publish',
+            topic: topic,
+            payload: payload,
+            qos: qos,
+            retain: retain
+        });
+    }
+
+    // Get MQTT status
+    getMQTTStatus() {
         this.send({
             type: 'get_status'
         });
+    }
+
+    // Get all connected users
+    getAllUsers() {
+        this.send({
+            type: 'get_all_users'
+        });
+    }
+
+    // Send ping
+    ping() {
+        this.send({
+            type: 'ping',
+            timestamp: new Date().toISOString()
+        });
+    }
+
+    // Get current user ID
+    getUserId() {
+        return this.currentUserId;
     }
 }
 
