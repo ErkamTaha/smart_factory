@@ -178,12 +178,6 @@ class MQTTClient:
     def publish(self, topic: str, payload: Union[dict, str], qos: Optional[int] = None, retain: bool = False):
         """
         Publish message to topic
-        
-        Args:
-            topic: MQTT topic to publish to
-            payload: Message payload (dict or string)
-            qos: Quality of Service level (0, 1, or 2). If None, uses client's default QoS
-            retain: Whether to retain the message on the broker
         """
         if isinstance(payload, dict):
             payload_str = json.dumps(payload)
@@ -227,11 +221,6 @@ class MQTTClient:
     def subscribe(self, topic: str, callback: Callable, qos: Optional[int] = None):
         """
         Subscribe to topic with callback function
-        
-        Args:
-            topic: MQTT topic to subscribe to
-            callback: Callback function to call when message is received
-            qos: Quality of Service level (0, 1, or 2). If None, uses client's default QoS
         """
         subscribe_qos = qos if qos is not None else self.qos
         
@@ -260,29 +249,6 @@ def get_mqtt_client() -> Optional[MQTTClient]:
 def init_mqtt_client(broker_host: str, broker_port: int, 
                      username: Optional[str] = None, password: Optional[str] = None,
                      qos: int = 1) -> MQTTClient:
-    """
-    Initialize global MQTT client
-    
-    Args:
-        broker_host: MQTT broker hostname
-        broker_port: MQTT broker port
-        username: Optional MQTT username
-        password: Optional MQTT password
-        qos: Default Quality of Service level (0, 1, or 2). Default is 1.
-    """
     global mqtt_client
     mqtt_client = MQTTClient(broker_host, broker_port, username, password, qos)
     return mqtt_client
-
-
-"""
-FILE 1 of 2: client.py
-This is the updated backend MQTT client with QoS and Last Will Testament.
-
-Key changes:
-- Added QoS parameter to __init__, publish(), and subscribe()
-- Implemented Last Will Testament on topic "factory/backend/status"
-- Publishes online status after connecting
-- Publishes offline status on graceful disconnect
-- All MQTT operations now include QoS level
-"""

@@ -109,6 +109,12 @@
           ]
         }
       ]
+    },
+    "erkam": {
+      "roles": [
+        "admin"
+      ],
+      "custom_permissions": []
     }
   }
 }

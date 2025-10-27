@@ -200,10 +200,6 @@ class UserMQTTClient:
     def subscribe(self, topic: str, qos: Optional[int] = None) -> Dict[str, Any]:
         """
         Subscribe to MQTT topic with ACL check
-        
-        Args:
-            topic: MQTT topic to subscribe to
-            qos: Quality of Service level (0, 1, or 2). If None, uses client's default QoS
         """
         # Check ACL permission
         if not self._check_acl_permission(topic, "subscribe"):
@@ -251,12 +247,6 @@ class UserMQTTClient:
     def publish(self, topic: str, payload, qos: Optional[int] = None, retain: bool = False) -> Dict[str, Any]:
         """
         Publish message to MQTT topic with ACL check
-        
-        Args:
-            topic: MQTT topic to publish to
-            payload: Message payload (dict or string)
-            qos: Quality of Service level (0, 1, or 2). If None, uses client's default QoS
-            retain: Whether to retain the message on the broker
         """
         # Check ACL permission
         if not self._check_acl_permission(topic, "publish"):
@@ -337,11 +327,6 @@ class UserMQTTClientManager:
     def create_user_client(self, user_id: str, websocket: WebSocket, qos: Optional[int] = None) -> UserMQTTClient:
         """
         Create and connect MQTT client for a user
-        
-        Args:
-            user_id: Unique user identifier
-            websocket: WebSocket connection for the user
-            qos: Quality of Service level (0, 1, or 2). If None, uses manager's default QoS
         """
         # If user already has a client, disconnect it first
         if user_id in self.user_clients:
@@ -420,27 +405,7 @@ def init_user_mqtt_manager(broker_host: str, broker_port: int,
                            qos: int = 1) -> UserMQTTClientManager:
     """
     Initialize global user MQTT manager
-    
-    Args:
-        broker_host: MQTT broker hostname
-        broker_port: MQTT broker port
-        username: Optional MQTT username
-        password: Optional MQTT password
-        qos: Default Quality of Service level (0, 1, or 2). Default is 1.
     """
     global user_mqtt_manager
     user_mqtt_manager = UserMQTTClientManager(broker_host, broker_port, username, password, qos)
     return user_mqtt_manager
-
-
-"""
-FILE 2 of 2: user_client_manager.py
-This is the updated user MQTT client manager with QoS and Last Will Testament.
-
-Key changes:
-- Added QoS parameter to UserMQTTClient and UserMQTTClientManager
-- Implemented Last Will Testament on topic "factory/users/{user_id}/status"
-- Each user publishes their online/offline status
-- ACL-enforced publish() and subscribe() now support QoS
-- All MQTT operations include QoS level in logs and responses
-"""

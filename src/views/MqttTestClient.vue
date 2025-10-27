@@ -5,7 +5,7 @@
                 <ion-buttons slot="start">
                     <ion-back-button default-href="/"></ion-back-button>
                 </ion-buttons>
-                <ion-title>🏭 MQTT Test & Management</ion-title>
+                <ion-title>MQTT Test & Management</ion-title>
                 <ion-buttons slot="end">
                     <ion-button @click="activeTab = 'mqtt'" :class="{ 'active-tab': activeTab === 'mqtt' }">
                         MQTT
@@ -99,10 +99,9 @@
                                     <!-- Active Subscriptions -->
                                     <div v-if="subscribedTopics.length > 0" class="ion-margin-top">
                                         <ion-label class="subscriptions-label">Active Subscriptions:</ion-label>
-                                        <ion-chip v-for="topic in subscribedTopics" :key="topic" color="primary"
-                                            @click="unsubscribe(topic)">
+                                        <ion-chip v-for="topic in subscribedTopics" :key="topic" color="primary">
                                             <ion-label>{{ topic }}</ion-label>
-                                            <ion-icon :icon="closeCircleOutline"></ion-icon>
+                                            <ion-icon :icon="closeCircleOutline" @click="unsubscribe(topic)"></ion-icon>
                                         </ion-chip>
                                     </div>
                                 </ion-card-content>
