@@ -69,12 +69,14 @@ class WebSocketManager:
         for broken_connection in broken_connections:
             self.disconnect(broken_connection)
     
-    async def broadcast_sensor_data(self, topic: str, data: Dict[str, Any]):
+    async def broadcast_sensor_data(self, topic: str, data: Dict[str, Any], qos, retain):
         """Broadcast sensor data to all connected clients"""
         message = {
             "type": "sensor_data",
             "topic": topic,
             "data": data,
+            "qos": qos,
+            "retain":retain,
             "timestamp": datetime.utcnow().isoformat()
         }
         await self.broadcast(message)

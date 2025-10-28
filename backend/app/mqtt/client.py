@@ -126,6 +126,7 @@ class MQTTClient:
         topic = msg.topic
         payload = msg.payload.decode()
         qos = msg.qos
+        retain = msg.retain
         
         logger.info(f"Received message on topic {topic} (QoS {qos}): {payload}")
         
@@ -138,7 +139,7 @@ class MQTTClient:
         # Safely broadcast to WebSocket clients (for real-time updates)
         if self.websocket_manager:
             self._safe_broadcast(
-                self.websocket_manager.broadcast_sensor_data(topic, data)
+                self.websocket_manager.broadcast_sensor_data(topic, data, qos, retain)
             )
         
         # Call all registered callbacks for this topic (existing functionality)

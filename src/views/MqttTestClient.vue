@@ -169,9 +169,9 @@
                         <ion-grid>
                             <ion-row>
                                 <ion-col size="6" size-md="3">
-                                    <ion-button expand="block" fill="outline" @click="subscribeToAllStatus"
+                                    <ion-button expand="block" fill="outline" @click="subscribeToUserStatuses"
                                         :disabled="!isConnected">
-                                        All Status
+                                        User Statuses
                                     </ion-button>
                                 </ion-col>
                                 <ion-col size="6" size-md="3">
@@ -212,9 +212,14 @@
                             <div v-for="(msg, index) in messages" :key="index" :class="['message', msg.type]">
                                 <div class="message-header">
                                     <span class="timestamp">{{ msg.timestamp }}</span>
-                                    <ion-chip v-if="msg.qos !== undefined" size="small" color="secondary">
-                                        QoS {{ msg.qos }}
-                                    </ion-chip>
+                                    <ion-row>
+                                        <ion-chip v-if="msg.qos !== undefined" size="small" color="secondary">
+                                            QoS {{ msg.qos }}
+                                        </ion-chip>
+                                        <ion-chip v-if="msg.retain == true" size="small" color="secondary">
+                                            Retained
+                                        </ion-chip>
+                                    </ion-row>
                                 </div>
                                 <div v-if="msg.topic" class="topic">{{ msg.topic }}</div>
                                 <div class="payload">{{ msg.payload }}</div>
@@ -540,6 +545,7 @@ const handleSensorData = (data) => {
     addMessage('received', {
         topic: data.topic,
         qos: data.qos,
+        retain: data.retain,
         payload: JSON.stringify(data.data, null, 2),
     });
 };
@@ -662,8 +668,8 @@ const performPublish = () => {
 };
 
 // Quick Actions
-const subscribeToAllStatus = () => {
-    subscribeTopic.value = 'sf/+/status';
+const subscribeToUserStatuses = () => {
+    subscribeTopic.value = 'sf/+/+/status';
     subscribeQos.value = 1;
     subscribe();
 };

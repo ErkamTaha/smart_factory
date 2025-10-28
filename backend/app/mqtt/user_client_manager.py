@@ -133,6 +133,7 @@ class UserMQTTClient:
         topic = msg.topic
         payload = msg.payload.decode()
         qos = msg.qos
+        retain = msg.retain
         
         logger.info(f"User {self.user_id} received message on {topic} (QoS {qos})")
         
@@ -155,6 +156,7 @@ class UserMQTTClient:
             "topic": topic,
             "data": data,
             "qos": qos,
+            "retain": retain,
             "timestamp": datetime.utcnow().isoformat()
         })
     

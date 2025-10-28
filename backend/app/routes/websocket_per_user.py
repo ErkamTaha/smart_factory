@@ -83,8 +83,9 @@ async def handle_user_message(user_id: str, message: dict, mqtt_client, websocke
     elif message_type == "subscribe":
         # Subscribe to MQTT topics
         topics = message.get("topics", [])
+        qos = message.get("qos")
         for topic in topics:
-            mqtt_client.subscribe(topic)
+            mqtt_client.subscribe(topic, qos)
         
         await websocket.send_text(json.dumps({
             "type": "subscription_ack",
@@ -110,6 +111,8 @@ async def handle_user_message(user_id: str, message: dict, mqtt_client, websocke
         # Publish to MQTT
         topic = message.get("topic")
         payload = message.get("payload")
+        retain = message.get("retain")
+        qos = message.get("qos")
         
         if not topic or payload is None:
             await websocket.send_text(json.dumps({
@@ -118,7 +121,7 @@ async def handle_user_message(user_id: str, message: dict, mqtt_client, websocke
             }))
             return
         
-        mqtt_client.publish(topic, payload)
+        mqtt_client.publish(topic, payload, qos, retain)
     
     elif message_type == "get_status":
         # Get user's MQTT status
@@ -133,6 +136,7 @@ async def handle_user_message(user_id: str, message: dict, mqtt_client, websocke
         await websocket.send_text(json.dumps({
             "type": "status",
             "user_id": user_id,
+            "qos": mqtt_client.qos,
             "mqtt_connected": mqtt_client.is_connected,
             "subscribed_topics": mqtt_client.subscribed_topics,
             "total_users": total_users,
