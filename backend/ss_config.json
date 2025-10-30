@@ -1,0 +1,24 @@
+{
+    "version": "1.0",
+    "sensors": {
+        "test_device_001": {
+            "pattern": "sf/sensors/test_device_001",
+            "sensor_type": "temperature",
+            "active": "true",
+            "limits": {
+                "default": {
+                    "selected": "true",
+                    "upper": "30",
+                    "lower": "20",
+                    "unit": "C"
+                },
+                "secondary": {
+                    "selected": "false",
+                    "upper": "35",
+                    "lower": "25",
+                    "unit": "C"
+                }
+            }
+        }
+    }
+}
