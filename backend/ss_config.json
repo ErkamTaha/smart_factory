@@ -1,19 +1,27 @@
 {
     "version": "1.0",
+    "types": {
+        "temperature": {
+            "description": "Temperature information.",
+            "properties": [
+                {}
+            ]
+        }
+    },
     "sensors": {
         "test_device_001": {
             "pattern": "sf/sensors/test_device_001",
             "sensor_type": "temperature",
-            "active": "true",
+            "active": true,
             "limits": {
                 "default": {
-                    "selected": "true",
+                    "selected": true,
                     "upper": "30",
                     "lower": "20",
                     "unit": "C"
                 },
                 "secondary": {
-                    "selected": "false",
+                    "selected": false,
                     "upper": "35",
                     "lower": "25",
                     "unit": "C"
