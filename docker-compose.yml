@@ -1,0 +1,168 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15
+    container_name: smartfactory_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: smartfactory
+      POSTGRES_USER: smartfactory
+      POSTGRES_PASSWORD: password123
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - smartfactory_net
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U smartfactory -d smartfactory" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MQTT Broker
+  mosquitto:
+    image: eclipse-mosquitto:latest
+    container_name: smartfactory_mosquitto
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./infrastructure/mosquitto/config:/mosquitto/config
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+    networks:
+      - smartfactory_net
+    healthcheck:
+      test: [ "CMD-SHELL", "mosquitto_sub -h localhost -t '$$SYS/#' -C 1 -W 3" ]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: smartfactory_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - smartfactory_net
+    command: redis-server --appendonly yes --requirepass redis123
+    healthcheck:
+      test: [ "CMD", "redis-cli", "--raw", "incr", "ping" ]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: development
+    container_name: smartfactory_backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://smartfactory:password123@postgres:5432/smartfactory
+      - MQTT_BROKER_HOST=mosquitto
+      - MQTT_BROKER_PORT=1883
+      - REDIS_URL=redis://redis:6379
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./backend:/app
+      - backend_logs:/app/logs
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app --reload-dir /app/app
+    networks:
+      - smartfactory_net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mosquitto:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/api/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Frontend Web App
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: development
+    container_name: smartfactory_frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_API_BASE_URL=http://localhost:8000
+      - VITE_WS_URL=ws://localhost:8000
+      - CHOKIDAR_USEPOLLING=true
+      - CHOKIDAR_INTERVAL=200
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    networks:
+      - smartfactory_net
+    depends_on:
+      - backend
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:3000" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # pgAdmin - PostgreSQL Web Interface
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: smartfactory_pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@smartfactory.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    networks:
+      - smartfactory_net
+    depends_on:
+      - postgres
+
+volumes:
+  postgres_data:
+    driver: local
+  mosquitto_data:
+    driver: local
+  mosquitto_log:
+    driver: local
+  redis_data:
+    driver: local
+  backend_logs:
+    driver: local
+  pgadmin_data:
+    driver: local
+
+networks:
+  smartfactory_net:
+    driver: bridge
+    name: smartfactory_network
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

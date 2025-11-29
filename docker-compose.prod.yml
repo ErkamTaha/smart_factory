@@ -1,0 +1,128 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15
+    container_name: smartfactory_postgres_prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-smartfactory}
+      POSTGRES_USER: ${POSTGRES_USER:-smartfactory}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - smartfactory_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-smartfactory} -d ${POSTGRES_DB:-smartfactory}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MQTT Broker
+  mosquitto:
+    image: eclipse-mosquitto:latest
+    container_name: smartfactory_mosquitto_prod
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./infrastructure/mosquitto/config:/mosquitto/config
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+    networks:
+      - smartfactory_net
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: smartfactory_redis_prod
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    networks:
+      - smartfactory_net
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: production
+    container_name: smartfactory_backend_prod
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - MQTT_BROKER_HOST=mosquitto
+      - MQTT_BROKER_PORT=1883
+      - REDIS_URL=redis://redis:6379
+      - ENVIRONMENT=production
+      - DEBUG=false
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - SECRET_KEY=${SECRET_KEY}
+    networks:
+      - smartfactory_net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mosquitto:
+        condition: service_started
+      redis:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Frontend Web App
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: production
+    container_name: smartfactory_frontend_prod
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    networks:
+      - smartfactory_net
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Reverse Proxy (Nginx)
+  nginx:
+    image: nginx:alpine
+    container_name: smartfactory_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infrastructure/nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./infrastructure/nginx/ssl:/etc/nginx/ssl
+    networks:
+      - smartfactory_net
+    depends_on:
+      - frontend
+      - backend
+
+volumes:
+  postgres_data:
+  mosquitto_data:
+  mosquitto_log:
+  redis_data:
+
+networks:
+  smartfactory_net:
+    driver: bridge
+    name: smartfactory_production
