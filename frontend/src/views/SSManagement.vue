@@ -114,7 +114,7 @@
                                 <ion-row v-for="(limit, index) in newSensor.limits" :key="index">
                                     <ion-col size="12" size-md="3">
                                         <ion-item>
-                                            <ion-input :value="limit.name" label="Limit Name" readonly
+                                            <ion-input :value="limit.name" label="Limit Name"
                                                 label-placement="stacked"></ion-input>
                                         </ion-item>
                                     </ion-col>
@@ -616,7 +616,7 @@
                                 <p><strong>Triggered Value:</strong> {{ selectedAlert.triggered_value }} {{
                                     selectedAlert.unit }}</p>
                                 <p><strong>Limit Value:</strong> {{ selectedAlert.limit_value }} {{ selectedAlert.unit
-                                    }}</p>
+                                }}</p>
                                 <p><strong>MQTT Topic:</strong> {{ selectedAlert.mqtt_topic }}</p>
                                 <p>
                                     <strong>Status:</strong>
