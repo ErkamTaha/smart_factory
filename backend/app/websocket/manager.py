@@ -14,7 +14,8 @@ class WebSocketManager:
 
     async def connect(self, websocket: WebSocket, user_id: str):
         """Accept a new WebSocket connection"""
-        self.active_connections.append(websocket)
+        await websocket.accept()
+        self.active_connections[user_id] = websocket
         logger.info(
             f"WebSocket connected. Total connections: {len(self.active_connections)}"
         )
@@ -27,17 +28,17 @@ class WebSocketManager:
                 f"WebSocket disconnected. Total connections: {len(self.active_connections)}"
             )
 
-    async def send_personal_message(
-        self, message: Dict[str, Any], websocket: WebSocket
-    ):
+    async def send_personal_message(self, message: Dict[str, Any], user_id: str):
         """Send message to a specific WebSocket connection"""
         try:
+            if user_id in self.active_connections:
+                websocket = self.active_connections[user_id]
             # Convert to JSON string if it's a dictionary
             if isinstance(message, dict):
                 message_str = json.dumps(message)
             else:
                 message_str = str(message)
-            await websocket.send_text(message_str)
+            await websocket.send_json(message_str)
         except Exception as e:
             logger.error(f"Error sending personal message: {e}")
             # Remove broken connection

@@ -13,12 +13,13 @@ from pathlib import Path
 
 from app.database.database import init_database, test_connection
 from app.mqtt.client import init_mqtt_client, get_mqtt_client
-from app.mqtt.user_client_manager import init_user_mqtt_manager, get_user_mqtt_manager
+from backend.app.mqtt.user_client import init_user_mqtt_manager, get_user_mqtt_manager
 from app.websocket.manager import get_websocket_manager
-from app.security.db_acl_manager import init_acl_manager, get_acl_manager
-from app.security.db_ss_manager import init_ss_manager, get_ss_manager
-from app.routes import iot, websocket_per_user, acl, ss
+from app.managers.db_acl_manager import init_acl_manager, get_acl_manager
+from app.managers.db_ss_manager import init_ss_manager, get_ss_manager
+from backend.app.routes import websocket_router
 from app.config import settings
+from backend.app.routes import acl_router, mqtt_router, ss_router
 
 # Configure logging
 logging.basicConfig(
@@ -76,7 +77,7 @@ async def lifespan(app: FastAPI):
 
         # Subscribe to sensor topics
         mqtt.subscribe(
-            f"{settings.mqtt_topic_prefix}/sensors/#", iot.handle_sensor_message, qos=1
+            f"{settings.mqtt_topic_prefix}/sensors/#", mqtt.handle_sensor_message, qos=1
         )
         logger.info("✅ Shared MQTT client initialized")
     except Exception as e:
@@ -134,10 +135,10 @@ app.add_middleware(
 )
 
 # Include routers
-app.include_router(iot.router)
-app.include_router(websocket_per_user.router, prefix="/ws")
-app.include_router(acl.router)
-app.include_router(ss.router)
+app.include_router(mqtt_router.router)
+app.include_router(websocket_router.router, prefix="/ws")
+app.include_router(acl_router.router)
+app.include_router(ss_router.router)
 
 
 @app.get("/")

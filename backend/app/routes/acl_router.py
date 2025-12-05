@@ -4,36 +4,11 @@ ACL (Access Control List) API routes with database integration
 
 import logging, traceback
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
-from typing import List, Optional, Dict, Any
-from app.security.db_acl_manager import get_acl_manager
-from app.mqtt.user_client_manager import get_user_mqtt_manager
+from app.managers.db_acl_manager import get_acl_manager
+from backend.app.mqtt.user_client import get_user_mqtt_manager
+from app.schemas.acl_schemas import PermissionCheck, Permission, UserCreate, UserUpdate
 
 router = APIRouter(prefix="/api/acl", tags=["ACL Management"])
-
-
-# Request models
-class PermissionCheck(BaseModel):
-    user_id: str
-    topic: str
-    action: str  # "subscribe" or "publish"
-
-
-class UserCreate(BaseModel):
-    user_id: str
-    roles: List[str]
-    custom_permissions: Optional[List[Dict[str, Any]]] = None
-
-
-class UserUpdate(BaseModel):
-    roles: Optional[List[str]] = None
-    custom_permissions: Optional[List[Dict[str, Any]]] = None
-
-
-class Permission(BaseModel):
-    pattern: str
-    allow: List[str]
-    deny: Optional[List[str]] = None
 
 
 # ACL Information Endpoints
@@ -67,16 +42,16 @@ async def get_all_users():
 
 
 @router.get("/users/{user_id}")
-async def get_user(user_id: str):
+async def get_user(username: str):
     """Get specific user's ACL information"""
     acl = get_acl_manager()
     if not acl:
         raise HTTPException(status_code=503, detail="ACL manager not available")
     try:
-        user_info = await acl.get_user_info(user_id)
+        user_info = await acl.get_user_info(username)
         if not user_info:
             raise HTTPException(
-                status_code=404, detail=f"User {user_id} not found in ACL"
+                status_code=404, detail=f"User {username} not found in ACL"
             )
 
         return user_info
@@ -109,11 +84,11 @@ async def check_permission(check: PermissionCheck):
     try:
 
         has_permission = await acl.check_permission(
-            check.user_id, check.topic, check.action
+            check.username, check.topic, check.action
         )
 
         return {
-            "user_id": check.user_id,
+            "username": check.username,
             "topic": check.topic,
             "action": check.action,
             "allowed": has_permission,
@@ -132,19 +107,19 @@ async def create_user(user: UserCreate):
         raise HTTPException(status_code=503, detail="ACL manager not available")
 
     try:
-        await acl.add_user(user.user_id, user.roles, user.custom_permissions)
+        await acl.add_user(user.username, user.roles, user.custom_permissions)
 
         return {
-            "message": f"User {user.user_id} created successfully",
-            "user": await acl.get_user_info(user.user_id),
+            "message": f"User {user.username} created successfully",
+            "user": await acl.get_user_info(user.username),
         }
     except Exception as e:
         logging.error(f"Error in create_user:\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.put("/users/{user_id}")
-async def update_user(user_id: str, update: UserUpdate):
+@router.put("/users/{username}")
+async def update_user(username: str, update: UserUpdate):
     """Update user's roles or permissions"""
     acl = get_acl_manager()
     if not acl:
@@ -153,23 +128,23 @@ async def update_user(user_id: str, update: UserUpdate):
     try:
         # Update roles if provided
         if update.roles is not None:
-            await acl.update_user_roles(user_id, update.roles)
+            await acl.update_user_roles(username, update.roles)
 
         # Update custom permissions if provided
         if update.custom_permissions is not None:
             # Note: This would need to be implemented in the database manager
             # For now, we'll add each permission individually
             for permission in update.custom_permissions:
-                await acl.add_user_permission(user_id, permission)
+                await acl.add_user_permission(username, permission)
 
         # If user is currently connected, notify them about permission changes
         mqtt_manager = get_user_mqtt_manager()
         if mqtt_manager:
-            user_client = mqtt_manager.get_user_client(user_id)
+            user_client = mqtt_manager.get_user_client(username)
             if user_client:
                 # Check current subscriptions against new permissions
                 for topic in user_client.subscribed_topics[:]:
-                    if not await acl.can_subscribe(user_id, topic):
+                    if not await acl.can_subscribe(username, topic):
                         # Permission revoked, force unsubscribe
                         user_client.unsubscribe(topic)
                         user_client._send_to_user(
@@ -182,16 +157,16 @@ async def update_user(user_id: str, update: UserUpdate):
                         )
 
         return {
-            "message": f"User {user_id} updated successfully",
-            "user": await acl.get_user_info(user_id),
+            "message": f"User {username} updated successfully",
+            "user": await acl.get_user_info(username),
         }
     except Exception as e:
         logging.error(f"Error in update_user:\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.delete("/users/{user_id}")
-async def delete_user(user_id: str):
+@router.delete("/users/{username}")
+async def delete_user(username: str):
     """Remove user from ACL"""
     acl = get_acl_manager()
     if not acl:
@@ -201,29 +176,29 @@ async def delete_user(user_id: str):
         # If user is connected, disconnect them
         mqtt_manager = get_user_mqtt_manager()
         if mqtt_manager:
-            mqtt_manager.remove_user_client(user_id)
+            mqtt_manager.remove_user_client(username)
 
-        await acl.remove_user(user_id)
+        await acl.remove_user(username)
 
-        return {"message": f"User {user_id} removed successfully"}
+        return {"message": f"User {username} removed successfully"}
     except Exception as e:
         logging.error(f"Error in delete_user:\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/users/{user_id}/permissions")
-async def add_user_permission(user_id: str, permission: Permission):
+@router.post("/users/{username}/permissions")
+async def add_user_permission(username: str, permission: Permission):
     """Add custom permission to user"""
     acl = get_acl_manager()
     if not acl:
         raise HTTPException(status_code=503, detail="ACL manager not available")
 
     try:
-        await acl.add_user_permission(user_id, permission.dict())
+        await acl.add_user_permission(username, permission.dict())
 
         return {
-            "message": f"Permission added to user {user_id}",
-            "user": acl.get_user_info(user_id),
+            "message": f"Permission added to user {username}",
+            "user": acl.get_user_info(username),
         }
     except Exception as e:
         logging.error(f"Error in add_user_permission:\n{traceback.format_exc()}")
@@ -281,9 +256,9 @@ async def get_active_sessions():
             return {"sessions": [], "count": 0}
 
         sessions = []
-        for user_id, client in mqtt_manager.user_clients.items():
+        for username, client in mqtt_manager.user_clients.items():
             session_info = {
-                "user_id": user_id,
+                "username": username,
                 "is_connected": client.is_connected,
                 "subscribed_topics": client.subscribed_topics,
                 "roles": [],
@@ -291,9 +266,9 @@ async def get_active_sessions():
             }
 
             if acl:
-                session_info["roles"] = await acl.get_user_roles(user_id)
+                session_info["roles"] = await acl.get_user_roles(username)
                 session_info["permissions_count"] = len(
-                    await acl.get_user_permissions(user_id)
+                    await acl.get_user_permissions(username)
                 )
 
             sessions.append(session_info)

@@ -11,7 +11,7 @@ class WebSocketService {
         this.currentUrl = null;
     }
 
-    connect(url, userId) {
+    connect(url, userId, token) {
         return new Promise((resolve, reject) => {
             if (this.isConnecting || (this.ws && this.ws.readyState === WebSocket.OPEN)) {
                 console.log('WebSocket already connected or connecting');
@@ -24,12 +24,11 @@ class WebSocketService {
             this.currentUserId = userId;
             this.currentUrl = url;
 
-            // Add user_id to URL
-            const urlWithUser = `${url}?user_id=${userId}`;
+            // Add user_id and token to URL
+            const urlWithId = `${url}?user_id=${userId}&token=${token}`;
 
             try {
-                console.log(`Connecting to WebSocket: ${urlWithUser}`);
-                this.ws = new WebSocket(urlWithUser);
+                this.ws = new WebSocket(urlWithId);
 
                 this.ws.onopen = (event) => {
                     console.log('WebSocket connected successfully as user:', userId);

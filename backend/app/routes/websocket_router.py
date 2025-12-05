@@ -3,7 +3,7 @@ import json
 import logging
 from typing import Optional
 from datetime import datetime, timezone
-from app.mqtt.user_client_manager import get_user_mqtt_manager
+from backend.app.mqtt.user_client import get_user_mqtt_manager
 from app.websocket.manager import get_websocket_manager
 
 logger = logging.getLogger(__name__)
@@ -11,10 +11,18 @@ router = APIRouter()
 
 
 @router.websocket("/ws")
-async def websocket_endpoint(
-    websocket: WebSocket, user_id: Optional[str] = Query(None)
-):
+async def websocket_endpoint(websocket: WebSocket):
     """WebSocket endpoint with per-user MQTT connections"""
+
+    token = websocket.query_params.get("token")
+    user_id = websocket.query_params.get("userId")
+
+    # 1. Validate token
+    payload = decode_jwt(token)  # your JWT validation
+
+    if payload["sub"] != user_id:
+        await websocket.close(code=4001)
+        return
 
     # Require user_id
     if not user_id:
@@ -26,10 +34,7 @@ async def websocket_endpoint(
         await websocket.close(code=1011, reason="MQTT manager not available")
         return
 
-    # Accept WebSocket connection
-    await websocket.accept()
-
-    # Connect to global websocket manager
+    # Connect to websocket manager
     ws_manager = get_websocket_manager()
     await ws_manager.connect(websocket, user_id)
 

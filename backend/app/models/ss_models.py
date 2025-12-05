@@ -14,7 +14,7 @@ from sqlalchemy import (
     Float,
 )
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
+from sqlalchemy.sql import func, select
 from app.database import Base
 from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any, Optional, Tuple
@@ -33,8 +33,8 @@ class SSSensorType(Base):
     # Relationships
     sensors = relationship("SSSensor", back_populates="sensor_type_obj")
 
-    def to_dict(self):
-        return {
+    def to_dict(self, include_relationships=True):
+        result = {
             "id": self.id,
             "name": self.name,
             "description": self.description,
@@ -42,6 +42,15 @@ class SSSensorType(Base):
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
+
+        if include_relationships:
+            result.update(
+                {
+                    "sensors_count": len(self.sensors) if self.sensors else 0,
+                }
+            )
+
+        return result
 
 
 class SSSensor(Base):
@@ -60,21 +69,42 @@ class SSSensor(Base):
     limits = relationship("SSSensorLimit", back_populates="sensor")
     alerts = relationship("SSAlert", back_populates="sensor")
 
-    def to_dict(self):
-        selected_limit = next(
-            (limit for limit in self.limits if limit.is_selected), None
-        )
-        return {
+    def to_dict(self, include_relationships=True):
+        result = {
             "id": self.id,
             "sensor_id": self.sensor_id,
             "pattern": self.pattern,
-            "sensor_type": self.sensor_type_obj.name if self.sensor_type_obj else None,
+            "sensor_type_id": self.sensor_type_id,
             "is_active": self.is_active,
-            "limits": [limit.to_dict() for limit in self.limits],
-            "selected_limit": selected_limit.to_dict() if selected_limit else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
+
+        if include_relationships:
+            selected_limit = self.get_selected_limit()
+            result.update(
+                {
+                    "sensor_type": (
+                        self.sensor_type_obj.name if self.sensor_type_obj else None
+                    ),
+                    "limits": (
+                        [
+                            limit.to_dict(include_relationships=False)
+                            for limit in self.limits
+                        ]
+                        if self.limits
+                        else []
+                    ),
+                    "selected_limit": (
+                        selected_limit.to_dict(include_relationships=False)
+                        if selected_limit
+                        else None
+                    ),
+                    "unresolved_alerts_count": len(self.get_unresolved_alerts()),
+                }
+            )
+
+        return result
 
     def get_selected_limit(self) -> Optional["SSSensorLimit"]:
         """Get the currently selected limit configuration"""
@@ -125,8 +155,8 @@ class SSSensorLimit(Base):
     # Relationships
     sensor = relationship("SSSensor", back_populates="limits")
 
-    def to_dict(self):
-        return {
+    def to_dict(self, include_relationships=True):
+        result = {
             "id": self.id,
             "name": self.name,
             "upper_limit": self.upper_limit,
@@ -136,6 +166,16 @@ class SSSensorLimit(Base):
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
+
+        if include_relationships:
+            result.update(
+                {
+                    "sensor_id": self.sensor.sensor_id if self.sensor else None,
+                    "sensor_pattern": self.sensor.pattern if self.sensor else None,
+                }
+            )
+
+        return result
 
 
 class SSAlert(Base):
@@ -159,10 +199,10 @@ class SSAlert(Base):
     # Relationships
     sensor = relationship("SSSensor", back_populates="alerts")
 
-    def to_dict(self):
-        return {
+    def to_dict(self, include_relationships=True):
+        result = {
             "id": self.id,
-            "sensor_id": self.sensor.sensor_id if self.sensor else None,
+            "sensor_id": self.sensor_id,
             "alert_type": self.alert_type,
             "triggered_value": self.triggered_value,
             "limit_value": self.limit_value,
@@ -177,6 +217,21 @@ class SSAlert(Base):
             "raw_data": self.raw_data,
         }
 
+        if include_relationships:
+            result.update(
+                {
+                    "sensor_identifier": self.sensor.sensor_id if self.sensor else None,
+                    "sensor_pattern": self.sensor.pattern if self.sensor else None,
+                    "sensor_type": (
+                        self.sensor.sensor_type_obj.name
+                        if self.sensor and self.sensor.sensor_type_obj
+                        else None
+                    ),
+                }
+            )
+
+        return result
+
 
 class SSConfig(Base):
     __tablename__ = "ss_config"
@@ -188,6 +243,16 @@ class SSConfig(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     updated_by = Column(String(100))
 
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "key": self.key,
+            "value": self.value,
+            "description": self.description,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "updated_by": self.updated_by,
+        }
+
     @classmethod
     def get_config_dict(cls, db):
         """Get all configuration as a dictionary"""
@@ -198,7 +263,6 @@ class SSConfig(Base):
 # Helper functions for SS operations
 async def create_default_sensor_types(db):
     """Create default sensor types if they don't exist"""
-    from sqlalchemy import select
 
     default_types = [
         {
@@ -236,52 +300,137 @@ async def create_default_sensor_types(db):
 
 
 async def create_default_sensors(db):
-    """Create default sensors from existing config if they don't exist"""
+    """Create default sensors for each sensor type if they don't exist"""
     from sqlalchemy import select
 
-    # Get temperature sensor type
-    result = await db.execute(
-        select(SSSensorType).where(SSSensorType.name == "temperature")
-    )
-    temp_type = result.scalars().first()
-    if not temp_type:
-        return
+    # Get all sensor types
+    result = await db.execute(select(SSSensorType))
+    sensor_types = {st.name: st for st in result.scalars()}
 
-    # Create test sensor if it doesn't exist
-    result = await db.execute(
-        select(SSSensor).where(SSSensor.sensor_id == "test_device_001")
-    )
-    existing = result.scalars().first()
-    if not existing:
-        sensor = SSSensor(
-            sensor_id="test_device_001",
-            pattern="sf/sensors/test_device_001",
-            sensor_type_id=temp_type.id,
-            is_active=True,
+    if not sensor_types:
+        return  # No sensor types exist yet
+
+    default_sensors = [
+        {
+            "sensor_id": "temp_sensor_floor_a1",
+            "pattern": "sf/sensors/temp_sensor_floor_a1/temperature",
+            "sensor_type_name": "temperature",
+            "limits": [
+                {
+                    "name": "normal_operation",
+                    "upper_limit": 30.0,
+                    "lower_limit": 18.0,
+                    "unit": "C",
+                    "is_selected": True,
+                },
+                {
+                    "name": "strict_control",
+                    "upper_limit": 25.0,
+                    "lower_limit": 20.0,
+                    "unit": "C",
+                    "is_selected": False,
+                },
+            ],
+        },
+        {
+            "sensor_id": "humidity_sensor_floor_a1",
+            "pattern": "sf/sensors/humidity_sensor_floor_a1/humidity",
+            "sensor_type_name": "humidity",
+            "limits": [
+                {
+                    "name": "normal_operation",
+                    "upper_limit": 70.0,
+                    "lower_limit": 30.0,
+                    "unit": "%",
+                    "is_selected": True,
+                },
+                {
+                    "name": "optimal_range",
+                    "upper_limit": 60.0,
+                    "lower_limit": 40.0,
+                    "unit": "%",
+                    "is_selected": False,
+                },
+            ],
+        },
+        {
+            "sensor_id": "pressure_sensor_line_b",
+            "pattern": "sf/sensors/pressure_sensor_line_b/pressure",
+            "sensor_type_name": "pressure",
+            "limits": [
+                {
+                    "name": "safe_operation",
+                    "upper_limit": 90.0,
+                    "lower_limit": 20.0,
+                    "unit": "psi",
+                    "is_selected": True,
+                },
+                {
+                    "name": "optimal_performance",
+                    "upper_limit": 80.0,
+                    "lower_limit": 40.0,
+                    "unit": "psi",
+                    "is_selected": False,
+                },
+            ],
+        },
+        {
+            "sensor_id": "motion_sensor_entrance_1",
+            "pattern": "sf/sensors/motion_sensor_entrance_1/motion",
+            "sensor_type_name": "motion",
+            "limits": [
+                {
+                    "name": "activity_threshold",
+                    "upper_limit": 100.0,  # Max detections per minute
+                    "lower_limit": 0.0,
+                    "unit": "count",
+                    "is_selected": True,
+                },
+                {
+                    "name": "high_traffic",
+                    "upper_limit": 50.0,
+                    "lower_limit": 0.0,
+                    "unit": "count",
+                    "is_selected": False,
+                },
+            ],
+        },
+    ]
+
+    for sensor_data in default_sensors:
+        # Check if sensor already exists
+        result = await db.execute(
+            select(SSSensor).where(SSSensor.sensor_id == sensor_data["sensor_id"])
         )
-        db.add(sensor)
-        await db.flush()  # Get the ID
+        existing = result.scalars().first()
 
-        # Create default limits
-        default_limit = SSSensorLimit(
-            sensor_id=sensor.id,
-            name="default",
-            upper_limit=30.0,
-            lower_limit=20.0,
-            unit="C",
-            is_selected=True,
-        )
+        if not existing:
+            sensor_type_name = sensor_data["sensor_type_name"]
+            sensor_type = sensor_types.get(sensor_type_name)
 
-        secondary_limit = SSSensorLimit(
-            sensor_id=sensor.id,
-            name="secondary",
-            upper_limit=35.0,
-            lower_limit=25.0,
-            unit="C",
-            is_selected=False,
-        )
+            if not sensor_type:
+                continue  # Skip if sensor type doesn't exist
 
-        db.add(default_limit)
-        db.add(secondary_limit)
+            # Create sensor
+            sensor = SSSensor(
+                sensor_id=sensor_data["sensor_id"],
+                pattern=sensor_data["pattern"],
+                sensor_type_id=sensor_type.id,
+                is_active=True,
+            )
+            db.add(sensor)
+            await db.flush()  # Get the sensor ID
+
+            # Create limits for this sensor
+            for limit_data in sensor_data["limits"]:
+                limit = SSSensorLimit(
+                    sensor_id=sensor.id,
+                    name=limit_data["name"],
+                    upper_limit=limit_data["upper_limit"],
+                    lower_limit=limit_data["lower_limit"],
+                    unit=limit_data["unit"],
+                    is_selected=limit_data["is_selected"],
+                )
+                db.add(limit)
 
     await db.commit()

@@ -753,7 +753,7 @@ const connectWebSocket = async () => {
     isLoading.value = true;
 
     try {
-        await webSocketService.connect(settings.value.wsUrl, settings.value.userId);
+        await webSocketService.connect(settings.value.wsUrl, settings.value.userId, authStore.token);
 
         // Subscribe to all necessary topics for real-time updates
         webSocketService.subscribeMQTT([

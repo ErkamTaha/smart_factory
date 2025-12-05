@@ -19,6 +19,8 @@ from sqlalchemy.sql import func, select
 from app.database import Base
 from datetime import datetime, timezone
 from typing import List, Dict, Any
+from .ss_models import SSSensor, SSSensorType
+from .acl_models import ACLUser
 
 
 class MQTTDevice(Base):
@@ -40,8 +42,8 @@ class MQTTDevice(Base):
     sensor_readings = relationship("MQTTSensorReading", back_populates="device")
     commands = relationship("MQTTCommand", back_populates="device")
 
-    def to_dict(self):
-        return {
+    def to_dict(self, include_relationships=True):
+        result = {
             "id": self.id,
             "device_id": self.device_id,
             "device_name": self.device_name,
@@ -55,6 +57,18 @@ class MQTTDevice(Base):
             "meta_data": self.meta_data,
         }
 
+        if include_relationships:
+            result.update(
+                {
+                    "sensor_readings_count": (
+                        len(self.sensor_readings) if self.sensor_readings else 0
+                    ),
+                    "commands_count": len(self.commands) if self.commands else 0,
+                }
+            )
+
+        return result
+
 
 class MQTTSensorReading(Base):
     __tablename__ = "mqtt_sensor_readings"
@@ -63,7 +77,10 @@ class MQTTSensorReading(Base):
     device_id = Column(
         Integer, ForeignKey("mqtt_devices.id"), nullable=False, index=True
     )
-    sensor_type = Column(String(50), nullable=False, index=True)
+    sensor_id = Column(Integer, ForeignKey("ss_sensors.id"), nullable=False, index=True)
+    sensor_type = Column(
+        Integer, ForeignKey("ss_sensor_types.id"), nullable=False, index=True
+    )
     value = Column(Float, nullable=False)
     unit = Column(String(20), nullable=False)
     timestamp = Column(DateTime(timezone=True), nullable=False, index=True)
@@ -71,10 +88,15 @@ class MQTTSensorReading(Base):
     qos = Column(Integer, default=1)
     retain = Column(Boolean, default=False)
     raw_data = Column(JSON)  # Store the complete raw MQTT payload
-    user_id = Column(String(100), index=True)  # Who published this reading
+    user_id = Column(
+        Integer, ForeignKey("acl_users.id"), nullable=False, index=True
+    )  # Who published this reading
 
     # Relationships
     device = relationship("MQTTDevice", back_populates="sensor_readings")
+    sensor = relationship("SSSensor")
+    sensor_type_obj = relationship("SSSensorType")
+    user = relationship("ACLUser")
 
     # Indexes for better query performance
     __table_args__ = (
@@ -83,11 +105,12 @@ class MQTTSensorReading(Base):
         Index("idx_sensor_readings_user_time", "user_id", "timestamp"),
     )
 
-    def to_dict(self):
-        return {
+    def to_dict(self, include_relationships=True):
+        result = {
             "id": self.id,
-            "device_id": self.device.device_id if self.device else None,
-            "sensor_type": self.sensor_type,
+            "device_id": self.device_id,
+            "sensor_id": self.sensor_id,
+            "sensor_type_id": self.sensor_type,
             "value": self.value,
             "unit": self.unit,
             "timestamp": self.timestamp.isoformat() if self.timestamp else None,
@@ -97,6 +120,22 @@ class MQTTSensorReading(Base):
             "raw_data": self.raw_data,
             "user_id": self.user_id,
         }
+
+        if include_relationships:
+            result.update(
+                {
+                    "device_name": self.device.device_name if self.device else None,
+                    "device_identifier": self.device.device_id if self.device else None,
+                    "sensor_identifier": self.sensor.sensor_id if self.sensor else None,
+                    "sensor_pattern": self.sensor.pattern if self.sensor else None,
+                    "sensor_type_name": (
+                        self.sensor_type_obj.name if self.sensor_type_obj else None
+                    ),
+                    "username": self.user.username if self.user else None,
+                }
+            )
+
+        return result
 
 
 class MQTTCommand(Base):
@@ -117,17 +156,20 @@ class MQTTCommand(Base):
     mqtt_topic = Column(String(200), nullable=False)
     qos = Column(Integer, default=1)
     retain = Column(Boolean, default=False)
-    user_id = Column(String(100), nullable=False, index=True)  # Who sent the command
+    user_id = Column(
+        Integer, ForeignKey("acl_users.id"), nullable=False, index=True
+    )  # Who sent the command
     response_data = Column(JSON)  # Store device response if any
     error_message = Column(Text)
 
     # Relationships
     device = relationship("MQTTDevice", back_populates="commands")
+    user = relationship("ACLUser")
 
-    def to_dict(self):
-        return {
+    def to_dict(self, include_relationships=True):
+        result = {
             "id": self.id,
-            "device_id": self.device.device_id if self.device else None,
+            "device_id": self.device_id,
             "command": self.command,
             "parameters": self.parameters,
             "status": self.status,
@@ -144,12 +186,23 @@ class MQTTCommand(Base):
             "error_message": self.error_message,
         }
 
+        if include_relationships:
+            result.update(
+                {
+                    "device_name": self.device.device_name if self.device else None,
+                    "device_identifier": self.device.device_id if self.device else None,
+                    "username": self.user.username if self.user else None,
+                }
+            )
+
+        return result
+
 
 class MQTTSession(Base):
     __tablename__ = "mqtt_sessions"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(String(100), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("acl_users.id"), nullable=False, index=True)
     client_id = Column(String(200), nullable=False)
     connected_at = Column(DateTime(timezone=True), server_default=func.now())
     disconnected_at = Column(DateTime(timezone=True))
@@ -160,8 +213,10 @@ class MQTTSession(Base):
     subscribed_topics = Column(JSON)  # Array of subscribed topics
     connection_metadata = Column(JSON)  # Additional connection info
 
-    def to_dict(self):
-        return {
+    user = relationship("ACLUser")
+
+    def to_dict(self, include_relationships=True):
+        result = {
             "id": self.id,
             "user_id": self.user_id,
             "client_id": self.client_id,
@@ -180,6 +235,16 @@ class MQTTSession(Base):
             "subscribed_topics": self.subscribed_topics or [],
             "connection_metadata": self.connection_metadata,
         }
+
+        if include_relationships:
+            result.update(
+                {
+                    "username": self.user.username if self.user else None,
+                    "user_email": self.user.email if self.user else None,
+                }
+            )
+
+        return result
 
 
 class MQTTTopicStats(Base):
@@ -216,102 +281,98 @@ class MQTTTopicStats(Base):
         }
 
 
-# Helper functions for MQTT operations
-async def create_or_update_device(
-    db, device_id: str, device_data: Dict[str, Any] = None
-) -> MQTTDevice:
-    """Create or update a device, return the device object"""
-    results = await db.execute(
-        select(MQTTDevice).where(MQTTDevice.device_id == device_id)
-    )
-    device = results.scalars.first()
+# In mqtt_models.py
 
-    if not device:
-        device = MQTTDevice(
-            device_id=device_id,
-            device_name=(
-                device_data.get("name", device_id) if device_data else device_id
-            ),
-            device_type=(
-                device_data.get("type", "unknown") if device_data else "unknown"
-            ),
-            is_active=True,
-            last_seen=datetime.now(timezone.utc),
-            meta_data=device_data,
+
+async def create_default_mqtt_devices(db):
+    """Create default MQTT devices for each sensor type if they don't exist"""
+    from sqlalchemy import select
+
+    default_devices = [
+        {
+            "device_id": "temp_sensor_floor_a1",
+            "device_name": "Temperature Sensor - Floor A1",
+            "device_type": "sensor",
+            "location": "Factory Floor - Section A1",
+            "description": "Ambient temperature monitoring for production area A1",
+            "is_active": True,
+            "meta_data": {
+                "manufacturer": "Sensirion AG",
+                "model": "SHT85",
+                "firmware_version": "2.1.0",
+                "installation_date": "2024-01-15",
+                "calibration_date": "2024-01-10",
+            },
+        },
+        {
+            "device_id": "humidity_sensor_floor_a1",
+            "device_name": "Humidity Sensor - Floor A1",
+            "device_type": "sensor",
+            "location": "Factory Floor - Section A1",
+            "description": "Relative humidity monitoring for production area A1",
+            "is_active": True,
+            "meta_data": {
+                "manufacturer": "Sensirion AG",
+                "model": "SHT85",
+                "firmware_version": "2.1.0",
+                "installation_date": "2024-01-15",
+                "calibration_date": "2024-01-10",
+            },
+        },
+        {
+            "device_id": "pressure_sensor_line_b",
+            "device_name": "Pressure Sensor - Production Line B",
+            "device_type": "sensor",
+            "location": "Factory Floor - Production Line B",
+            "description": "Hydraulic pressure monitoring for production line B",
+            "is_active": True,
+            "meta_data": {
+                "manufacturer": "Honeywell",
+                "model": "PX3AN0BS100PSAAX",
+                "firmware_version": "1.5.2",
+                "installation_date": "2024-02-01",
+                "pressure_range": "0-100 PSI",
+            },
+        },
+        {
+            "device_id": "motion_sensor_entrance_1",
+            "device_name": "Motion Sensor - Main Entrance",
+            "device_type": "sensor",
+            "location": "Factory Floor - Main Entrance",
+            "description": "Personnel and equipment movement detection at main entrance",
+            "is_active": True,
+            "meta_data": {
+                "manufacturer": "Bosch Security",
+                "model": "ISC-BPR2-W12",
+                "firmware_version": "3.0.1",
+                "installation_date": "2024-01-20",
+                "detection_range": "12 meters",
+            },
+        },
+        {
+            "device_id": "gateway_main_floor",
+            "device_name": "Main Floor Gateway",
+            "device_type": "gateway",
+            "location": "Factory Floor - Control Room",
+            "description": "Primary MQTT gateway for factory floor sensor network",
+            "is_active": True,
+            "meta_data": {
+                "manufacturer": "Industrial IoT Solutions",
+                "model": "IGW-1000",
+                "firmware_version": "2.5.0",
+                "max_connections": 250,
+                "supported_protocols": ["MQTT", "CoAP", "HTTP"],
+            },
+        },
+    ]
+
+    for device_data in default_devices:
+        result = await db.execute(
+            select(MQTTDevice).where(MQTTDevice.device_id == device_data["device_id"])
         )
-        db.add(device)
-        await db.flush()  # Get the ID
-    else:
-        # Update last seen and metadata if provided
-        device.last_seen = datetime.now(timezone.utc)
-        if device_data:
-            device.meta_data = device_data
+        existing = result.scalars().first()
+        if not existing:
+            device = MQTTDevice(**device_data)
+            db.add(device)
 
-    return device
-
-
-async def store_sensor_reading(
-    db,
-    device_id: str,
-    sensor_type: str,
-    value: float,
-    unit: str,
-    topic: str,
-    user_id: str = None,
-    raw_data: Dict[str, Any] = None,
-    qos: int = 1,
-    retain: bool = False,
-    timestamp: datetime = None,
-) -> MQTTSensorReading:
-    """Store a sensor reading in the database"""
-
-    # Create or update device
-    device = await create_or_update_device(db, device_id)
-
-    # Create sensor reading
-    reading = MQTTSensorReading(
-        device_id=device.id,
-        sensor_type=sensor_type,
-        value=value,
-        unit=unit,
-        timestamp=timestamp or datetime.now(timezone.utc),
-        mqtt_topic=topic,
-        qos=qos,
-        retain=retain,
-        raw_data=raw_data,
-        user_id=user_id,
-    )
-
-    db.add(reading)
-    return reading
-
-
-async def store_command(
-    db,
-    device_id: str,
-    command: str,
-    parameters: Dict[str, Any],
-    topic: str,
-    user_id: str,
-    qos: int = 1,
-    retain: bool = False,
-) -> MQTTCommand:
-    """Store a command in the database"""
-
-    # Create or update device
-    device = await create_or_update_device(db, device_id)
-
-    # Create command
-    cmd = MQTTCommand(
-        device_id=device.id,
-        command=command,
-        parameters=parameters,
-        mqtt_topic=topic,
-        qos=qos,
-        retain=retain,
-        user_id=user_id,
-        status="sent",
-    )
-
-    db.add(cmd)
-    return cmd
+    await db.commit()

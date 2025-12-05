@@ -5,6 +5,7 @@ Configuration settings for Smart Factory Backend
 import os
 from typing import List
 from pydantic_settings import BaseSettings
+from datetime import timedelta
 
 
 class Settings(BaseSettings):
@@ -14,7 +15,6 @@ class Settings(BaseSettings):
     port: int = 8000
     debug: bool = True
     environment: str = "development"
-    secret_key: str = "your-secret-key-change-in-production"
 
     # Database
     database_url: str = (
@@ -39,6 +39,11 @@ class Settings(BaseSettings):
 
     # Redis (optional)
     redis_url: str = "redis://redis:6379"
+
+    SECRET_KEY = os.getenv("JWT_SECRET", "dev-secret-change-me")
+    ALGORITHM = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
+    ACCESS_TOKEN_EXPIRE = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
 
     # Logging
     log_level: str = "INFO"
