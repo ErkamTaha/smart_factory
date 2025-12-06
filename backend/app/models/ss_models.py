@@ -301,7 +301,6 @@ async def create_default_sensor_types(db):
 
 async def create_default_sensors(db):
     """Create default sensors for each sensor type if they don't exist"""
-    from sqlalchemy import select
 
     # Get all sensor types
     result = await db.execute(select(SSSensorType))

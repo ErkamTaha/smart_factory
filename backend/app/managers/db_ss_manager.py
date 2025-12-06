@@ -1,6 +1,6 @@
 """
 Database-backed Sensor Security (SS) Manager for Smart Factory
-Replaces the JSON file-based SS manager with PostgreSQL storage
+All methods now accept db session as parameter for proper lifecycle management
 """
 
 import traceback
@@ -8,11 +8,9 @@ import logging
 from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select, and_, or_
+from sqlalchemy import select, and_
 from sqlalchemy.orm import selectinload
-
-from app.database import SessionLocal
-from contextlib import asynccontextmanager
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.ss_models import (
     SSSensor,
@@ -20,8 +18,6 @@ from app.models.ss_models import (
     SSSensorLimit,
     SSAlert,
     SSConfig,
-    create_default_sensor_types,
-    create_default_sensors,
 )
 
 logger = logging.getLogger(__name__)
@@ -38,65 +34,53 @@ class DatabaseSSManager:
         self._sensor_cache: Dict[str, Dict] = {}
         # Type cache: type_name -> Dict
         self._type_cache: Dict[str, Dict] = {}
+        self._type_cache_ts: Optional[datetime] = None
 
-    @staticmethod
-    @asynccontextmanager
-    async def _get_db():
-        async with SessionLocal() as session:
-            try:
-                yield session
-            except Exception:
-                await session.rollback()
-                raise
-
-    async def _load_config(self):
+    async def _load_config(self, db: AsyncSession):
         """Load SS configuration from database"""
         try:
             logger.info("Loading SS configuration from database")
 
-            async with self._get_db() as db:
-                # Load configuration
-                result = await db.execute(select(SSConfig))
-                configs = result.scalars().all()
-                self._config_cache = {config.key: config.value for config in configs}
+            # Load configuration
+            result = await db.execute(select(SSConfig))
+            configs = result.scalars().all()
+            self._config_cache = {config.key: config.value for config in configs}
 
-                self.last_loaded = datetime.now(timezone.utc)
+            self.last_loaded = datetime.now(timezone.utc)
 
-                # Count sensors and types for logging
-                sensor_count_result = await db.execute(
-                    select(SSSensor).where(SSSensor.is_active == True)
-                )
-                sensor_count = len(sensor_count_result.scalars().all())
+            # Count sensors and types for logging
+            sensor_count_result = await db.execute(
+                select(SSSensor).where(SSSensor.is_active == True)
+            )
+            sensor_count = len(sensor_count_result.scalars().all())
 
-                type_count_result = await db.execute(select(SSSensorType))
-                type_count = len(type_count_result.scalars().all())
+            type_count_result = await db.execute(select(SSSensorType))
+            type_count = len(type_count_result.scalars().all())
 
-                logger.info(
-                    f"SS loaded from database: {sensor_count} sensors, {type_count} types"
-                )
+            logger.info(
+                f"SS loaded from database: {sensor_count} sensors, {type_count} types"
+            )
 
         except Exception as e:
             logger.error(f"Error loading SS from database: {e}")
-            # Fallback to default values
             self._config_cache = {}
 
-    async def reload(self):
+    async def reload(self, db: AsyncSession):
         """Reload SS configuration from database"""
-        await self._load_config()
+        await self._load_config(db)
         self._sensor_cache.clear()
         self._type_cache.clear()
 
-    async def _get_sensor(self, sensor_id: str) -> Optional[SSSensor]:
+    async def _get_sensor(self, sensor_id: str, db: AsyncSession) -> Optional[SSSensor]:
         """Fetch sensor from DB with relationships"""
-        async with self._get_db() as db:
-            result = await db.execute(
-                select(SSSensor).where(
-                    and_(SSSensor.sensor_id == sensor_id, SSSensor.is_active == True)
-                )
-            )
-            return result.scalars().first()
+        result = await db.execute(
+            select(SSSensor)
+            .where(and_(SSSensor.sensor_id == sensor_id, SSSensor.is_active == True))
+            .options(selectinload(SSSensor.sensor_type_obj))
+        )
+        return result.scalars().first()
 
-    async def get_sensor_type(self, sensor_id: str) -> Optional[str]:
+    async def get_sensor_type(self, sensor_id: str, db: AsyncSession) -> Optional[str]:
         """Get sensor type with caching"""
         now = datetime.now(timezone.utc)
         cached = self._sensor_cache.get(sensor_id)
@@ -104,7 +88,7 @@ class DatabaseSSManager:
             return cached["type"]
 
         try:
-            sensor = await self._get_sensor(sensor_id)
+            sensor = await self._get_sensor(sensor_id, db)
             sensor_type = (
                 sensor.sensor_type_obj.name
                 if sensor and sensor.sensor_type_obj
@@ -122,7 +106,9 @@ class DatabaseSSManager:
             logger.error(f"Error getting sensor type for {sensor_id}: {e}")
             return None
 
-    async def get_sensor_activeness(self, sensor_id: str) -> Optional[bool]:
+    async def get_sensor_activeness(
+        self, sensor_id: str, db: AsyncSession
+    ) -> Optional[bool]:
         """Get sensor activeness status with caching"""
         now = datetime.now(timezone.utc)
         cached = self._sensor_cache.get(sensor_id)
@@ -134,25 +120,26 @@ class DatabaseSSManager:
             return cached["is_active"]
 
         try:
-            async with self._get_db() as db:
-                result = await db.execute(
-                    select(SSSensor).where(SSSensor.sensor_id == sensor_id)
-                )
-                sensor = result.scalars().first()
-                is_active = sensor.is_active if sensor else None
+            result = await db.execute(
+                select(SSSensor).where(SSSensor.sensor_id == sensor_id)
+            )
+            sensor = result.scalars().first()
+            is_active = sensor.is_active if sensor else None
 
-                if cached:
-                    cached["is_active"] = is_active
-                    cached["ts"] = now
-                else:
-                    self._sensor_cache[sensor_id] = {"is_active": is_active, "ts": now}
+            if cached:
+                cached["is_active"] = is_active
+                cached["ts"] = now
+            else:
+                self._sensor_cache[sensor_id] = {"is_active": is_active, "ts": now}
 
-                return is_active
+            return is_active
         except Exception as e:
             logger.error(f"Error getting sensor activeness for {sensor_id}: {e}")
             return None
 
-    async def get_all_sensor_limits(self, sensor_id: str) -> Optional[Dict]:
+    async def get_all_sensor_limits(
+        self, sensor_id: str, db: AsyncSession
+    ) -> Optional[Dict]:
         """Get all limit configurations for a sensor with caching"""
         now = datetime.now(timezone.utc)
         cached = self._sensor_cache.get(sensor_id)
@@ -164,26 +151,23 @@ class DatabaseSSManager:
             return cached["all_limits"]
 
         try:
-            sensor = await self._get_sensor(sensor_id)
+            sensor = await self._get_sensor(sensor_id, db)
             limits = None
 
             if sensor:
                 limits = {}
-                async with self._get_db() as db:
-                    result = await db.execute(
-                        select(SSSensorLimit).where(
-                            SSSensorLimit.sensor_id == sensor.id
-                        )
-                    )
-                    sensor_limits = result.scalars().all()
+                result = await db.execute(
+                    select(SSSensorLimit).where(SSSensorLimit.sensor_id == sensor.id)
+                )
+                sensor_limits = result.scalars().all()
 
-                    for limit in sensor_limits:
-                        limits[limit.name] = {
-                            "selected": limit.is_selected,
-                            "upper": limit.upper_limit,
-                            "lower": limit.lower_limit,
-                            "unit": limit.unit,
-                        }
+                for limit in sensor_limits:
+                    limits[limit.name] = {
+                        "selected": limit.is_selected,
+                        "upper": limit.upper_limit,
+                        "lower": limit.lower_limit,
+                        "unit": limit.unit,
+                    }
 
             if cached:
                 cached["all_limits"] = limits
@@ -197,7 +181,7 @@ class DatabaseSSManager:
             return None
 
     async def get_sensor_limit_config(
-        self, sensor_id: str
+        self, sensor_id: str, db: AsyncSession
     ) -> Tuple[Optional[str], Optional[Dict]]:
         """Get the selected limit configuration for a sensor with caching"""
         now = datetime.now(timezone.utc)
@@ -210,29 +194,28 @@ class DatabaseSSManager:
             return cached["selected_limit_name"], cached.get("selected_limit_config")
 
         try:
-            sensor = await self._get_sensor(sensor_id)
+            sensor = await self._get_sensor(sensor_id, db)
             limit_name, limit_config = None, None
 
             if sensor:
-                async with self._get_db() as db:
-                    result = await db.execute(
-                        select(SSSensorLimit).where(
-                            and_(
-                                SSSensorLimit.sensor_id == sensor.id,
-                                SSSensorLimit.is_selected == True,
-                            )
+                result = await db.execute(
+                    select(SSSensorLimit).where(
+                        and_(
+                            SSSensorLimit.sensor_id == sensor.id,
+                            SSSensorLimit.is_selected == True,
                         )
                     )
-                    selected_limit = result.scalars().first()
+                )
+                selected_limit = result.scalars().first()
 
-                    if selected_limit:
-                        limit_name = selected_limit.name
-                        limit_config = {
-                            "upper": selected_limit.upper_limit,
-                            "lower": selected_limit.lower_limit,
-                            "unit": selected_limit.unit,
-                            "selected": selected_limit.is_selected,
-                        }
+                if selected_limit:
+                    limit_name = selected_limit.name
+                    limit_config = {
+                        "upper": selected_limit.upper_limit,
+                        "lower": selected_limit.lower_limit,
+                        "unit": selected_limit.unit,
+                        "selected": selected_limit.is_selected,
+                    }
 
             if cached:
                 cached["selected_limit_name"] = limit_name
@@ -251,12 +234,12 @@ class DatabaseSSManager:
             return None, None
 
     async def check_limit_for_alert(
-        self, sensor_id: str, value: float, unit: str
+        self, sensor_id: str, value: float, unit: str, db: AsyncSession
     ) -> Tuple[bool, Optional[str]]:
         """Check if a sensor value violates limits and should trigger an alert"""
         try:
             # Get selected limit configuration from cache
-            limit_name, limit_config = await self.get_sensor_limit_config(sensor_id)
+            limit_name, limit_config = await self.get_sensor_limit_config(sensor_id, db)
 
             if not limit_config:
                 logger.warning(f"Sensor {sensor_id} not found or no limit config in SS")
@@ -295,40 +278,39 @@ class DatabaseSSManager:
 
             if alert_triggered:
                 # Get sensor for alert creation
-                sensor = await self._get_sensor(sensor_id)
+                sensor = await self._get_sensor(sensor_id, db)
                 if sensor:
                     # Create alert record
-                    async with self._get_db() as db:
-                        limit_value = (
-                            limit_config["upper"]
+                    limit_value = (
+                        limit_config["upper"]
+                        if alert_type == "upper"
+                        else limit_config["lower"]
+                    )
+
+                    alert = SSAlert(
+                        sensor_id=sensor.id,
+                        alert_type=alert_type,
+                        triggered_value=value,
+                        limit_value=limit_value,
+                        unit=unit,
+                        message=(
+                            f"Sensor {sensor_id} exceeded {alert_type} limit: {value}{unit} > {limit_value}{unit}"
                             if alert_type == "upper"
-                            else limit_config["lower"]
-                        )
+                            else f"Sensor {sensor_id} below {alert_type} limit: {value}{unit} < {limit_value}{unit}"
+                        ),
+                        is_resolved=False,
+                        mqtt_topic=sensor.pattern,
+                        raw_data={
+                            "sensor_id": sensor_id,
+                            "value": value,
+                            "unit": unit,
+                        },
+                    )
 
-                        alert = SSAlert(
-                            sensor_id=sensor.id,
-                            alert_type=alert_type,
-                            triggered_value=value,
-                            limit_value=limit_value,
-                            unit=unit,
-                            message=(
-                                f"Sensor {sensor_id} exceeded {alert_type} limit: {value}{unit} > {limit_value}{unit}"
-                                if alert_type == "upper"
-                                else f"Sensor {sensor_id} below {alert_type} limit: {value}{unit} < {limit_value}{unit}"
-                            ),
-                            is_resolved=False,
-                            mqtt_topic=sensor.pattern,
-                            raw_data={
-                                "sensor_id": sensor_id,
-                                "value": value,
-                                "unit": unit,
-                            },
-                        )
+                    db.add(alert)
+                    await db.flush()
 
-                        db.add(alert)
-                        await db.commit()
-
-                        logger.warning(f"Alert triggered: {alert.message}")
+                    logger.warning(f"Alert triggered: {alert.message}")
 
             return alert_triggered, alert_type
 
@@ -343,79 +325,80 @@ class DatabaseSSManager:
         sensor_type: str,
         active: bool,
         limits: List[Dict],
+        db: AsyncSession,
     ):
         """Add a new sensor to SS"""
         try:
-            async with self._get_db() as db:
-                # Check if sensor already exists
-                result = await db.execute(
-                    select(SSSensor).where(SSSensor.sensor_id == sensor_id)
+            # Check if sensor already exists
+            result = await db.execute(
+                select(SSSensor).where(SSSensor.sensor_id == sensor_id)
+            )
+            existing = result.scalars().first()
+            if existing:
+                raise ValueError(f"Sensor {sensor_id} already exists")
+
+            # Get sensor type
+            result = await db.execute(
+                select(SSSensorType).where(SSSensorType.name == sensor_type)
+            )
+            sensor_type_obj = result.scalars().first()
+            if not sensor_type_obj:
+                raise ValueError(f"Sensor type {sensor_type} not found")
+
+            # Create sensor
+            sensor = SSSensor(
+                sensor_id=sensor_id,
+                pattern=pattern,
+                sensor_type_id=sensor_type_obj.id,
+                is_active=active,
+            )
+            db.add(sensor)
+            await db.flush()
+
+            # Add limits
+            for limit_data in limits:
+                limit_dict = (
+                    limit_data.dict() if hasattr(limit_data, "dict") else limit_data
                 )
-                existing = result.scalars().first()
-                if existing:
-                    raise ValueError(f"Sensor {sensor_id} already exists")
 
-                # Get sensor type
-                result = await db.execute(
-                    select(SSSensorType).where(SSSensorType.name == sensor_type)
+                limit = SSSensorLimit(
+                    sensor_id=sensor.id,
+                    name=limit_dict.get("name", "default"),
+                    upper_limit=float(limit_dict["upper_limit"]),
+                    lower_limit=float(limit_dict["lower_limit"]),
+                    unit=limit_dict["unit"],
+                    is_selected=bool(limit_dict.get("is_selected", False)),
                 )
-                sensor_type_obj = result.scalars().first()
-                if not sensor_type_obj:
-                    raise ValueError(f"Sensor type {sensor_type} not found")
+                db.add(limit)
 
-                # Create sensor
-                sensor = SSSensor(
-                    sensor_id=sensor_id,
-                    pattern=pattern,
-                    sensor_type_id=sensor_type_obj.id,
-                    is_active=active,
-                )
-                db.add(sensor)
-                await db.flush()  # Get the ID
+            await db.flush()
 
-                # Add limits
-                for limit_data in limits:
-                    limit_dict = limit_data.dict()
+            # Clear cache for this sensor
+            self._sensor_cache.pop(sensor_id, None)
 
-                    limit = SSSensorLimit(
-                        sensor_id=sensor.id,
-                        name=limit_dict.get("name", "default"),
-                        upper_limit=float(limit_dict["upper_limit"]),
-                        lower_limit=float(limit_dict["lower_limit"]),
-                        unit=limit_dict["unit"],
-                        is_selected=bool(limit_dict.get("is_selected", False)),
-                    )
-                    db.add(limit)
-
-                await db.commit()
-
-                # Clear cache for this sensor
-                self._sensor_cache.pop(sensor_id, None)
-
-                logger.info(f"Added sensor {sensor_id} with pattern: {pattern}")
+            logger.info(f"Added sensor {sensor_id} with pattern: {pattern}")
 
         except Exception as e:
             logger.error(f"Error adding sensor {sensor_id}: {e}")
             raise
 
-    async def remove_sensor(self, sensor_id: str):
+    async def remove_sensor(self, sensor_id: str, db: AsyncSession):
         """Remove sensor from SS (soft delete)"""
         try:
-            async with self._get_db() as db:
-                result = await db.execute(
-                    select(SSSensor).where(SSSensor.sensor_id == sensor_id)
-                )
-                sensor = result.scalars().first()
-                if sensor:
-                    sensor.is_active = False
-                    await db.commit()
+            result = await db.execute(
+                select(SSSensor).where(SSSensor.sensor_id == sensor_id)
+            )
+            sensor = result.scalars().first()
+            if sensor:
+                sensor.is_active = False
+                await db.flush()
 
-                    # Clear cache for this sensor
-                    self._sensor_cache.pop(sensor_id, None)
+                # Clear cache for this sensor
+                self._sensor_cache.pop(sensor_id, None)
 
-                    logger.info(f"Deactivated sensor {sensor_id}")
-                else:
-                    logger.warning(f"Sensor {sensor_id} not found")
+                logger.info(f"Deactivated sensor {sensor_id}")
+            else:
+                logger.warning(f"Sensor {sensor_id} not found")
         except Exception as e:
             logger.error(f"Error removing sensor {sensor_id}: {e}")
             raise
@@ -423,108 +406,106 @@ class DatabaseSSManager:
     async def update_sensor(
         self,
         sensor_id: str,
-        pattern: Optional[str] = None,
-        sensor_type: Optional[str] = None,
-        active: Optional[bool] = None,
-        limits: Optional[List[Dict]] = None,
+        pattern: Optional[str],
+        sensor_type: Optional[str],
+        active: Optional[bool],
+        limits: Optional[List[Dict]],
+        db: AsyncSession,
     ):
         """Update sensor configuration"""
         try:
-            async with self._get_db() as db:
-                # Fetch sensor
+            # Fetch sensor
+            result = await db.execute(
+                select(SSSensor).where(SSSensor.sensor_id == sensor_id)
+            )
+            sensor = result.scalars().first()
+            if not sensor:
+                raise ValueError(f"Sensor {sensor_id} not found")
+
+            # Update basic fields
+            if pattern is not None:
+                sensor.pattern = pattern
+
+            if active is not None:
+                sensor.is_active = active
+
+            if sensor_type is not None:
                 result = await db.execute(
-                    select(SSSensor).where(SSSensor.sensor_id == sensor_id)
+                    select(SSSensorType).where(SSSensorType.name == sensor_type)
                 )
-                sensor = result.scalars().first()
-                if not sensor:
-                    raise ValueError(f"Sensor {sensor_id} not found")
+                st = result.scalars().first()
+                if st:
+                    sensor.sensor_type_id = st.id
 
-                # ---- Update basic fields ----
-                if pattern is not None:
-                    sensor.pattern = pattern
+            # Update limits
+            if limits is not None:
+                # Remove existing limits
+                result = await db.execute(
+                    select(SSSensorLimit).where(SSSensorLimit.sensor_id == sensor.id)
+                )
+                existing_limits = result.scalars().all()
 
-                if active is not None:
-                    sensor.is_active = active
+                for l in existing_limits:
+                    await db.delete(l)
 
-                if sensor_type is not None:
-                    result = await db.execute(
-                        select(SSSensorType).where(SSSensorType.name == sensor_type)
+                # Insert new limits
+                for limit_data in limits:
+                    limit_dict = (
+                        limit_data.dict() if hasattr(limit_data, "dict") else limit_data
                     )
-                    st = result.scalars().first()
-                    if st:
-                        sensor.sensor_type_id = st.id
 
-                # ---- Update limits (list of Pydantic models) ----
-                if limits is not None:
-                    # Remove existing limits
-                    result = await db.execute(
-                        select(SSSensorLimit).where(
-                            SSSensorLimit.sensor_id == sensor.id
-                        )
+                    new_limit = SSSensorLimit(
+                        sensor_id=sensor.id,
+                        name=limit_dict.get("name", "default"),
+                        upper_limit=float(limit_dict["upper_limit"]),
+                        lower_limit=float(limit_dict["lower_limit"]),
+                        unit=limit_dict["unit"],
+                        is_selected=bool(limit_dict.get("is_selected", False)),
                     )
-                    existing_limits = result.scalars().all()
 
-                    for l in existing_limits:
-                        await db.delete(l)
+                    db.add(new_limit)
 
-                    # Insert new limits
-                    for limit_data in limits:
-                        limit_dict = limit_data.dict()
+            await db.flush()
 
-                        new_limit = SSSensorLimit(
-                            sensor_id=sensor.id,
-                            name=limit_dict.get("name", "default"),
-                            upper_limit=float(limit_dict["upper_limit"]),
-                            lower_limit=float(limit_dict["lower_limit"]),
-                            unit=limit_dict["unit"],
-                            is_selected=bool(limit_dict.get("is_selected", False)),
-                        )
+            # Clear cache
+            self._sensor_cache.pop(sensor_id, None)
 
-                        db.add(new_limit)
-
-                # Commit
-                await db.commit()
-
-                # Clear cache
-                self._sensor_cache.pop(sensor_id, None)
-
-                logger.info(f"Updated sensor {sensor_id}")
+            logger.info(f"Updated sensor {sensor_id}")
 
         except Exception as e:
             logger.error(f"Error updating sensor {sensor_id}: {e}")
             raise
 
-    async def get_ss_info(self) -> Dict:
+    async def get_ss_info(self, db: AsyncSession) -> Dict:
         """Get SS configuration info"""
         try:
-            async with self._get_db() as db:
-                # Count sensors
-                result = await db.execute(
-                    select(SSSensor).where(SSSensor.is_active == True)
-                )
-                total_sensors = len(result.scalars().all())
+            # Count sensors
+            result = await db.execute(
+                select(SSSensor).where(SSSensor.is_active == True)
+            )
+            total_sensors = len(result.scalars().all())
 
-                # Count types
-                result = await db.execute(select(SSSensorType))
-                total_types = len(result.scalars().all())
+            # Count types
+            result = await db.execute(select(SSSensorType))
+            total_types = len(result.scalars().all())
 
-                # Count active alerts
-                result = await db.execute(
-                    select(SSAlert).where(SSAlert.is_resolved == False)
-                )
-                active_alerts = len(result.scalars().all())
+            # Count active alerts
+            result = await db.execute(
+                select(SSAlert).where(SSAlert.is_resolved == False)
+            )
+            active_alerts = len(result.scalars().all())
 
-                return {
-                    "version": self._config_cache.get("version", "unknown"),
-                    "total_sensors": total_sensors,
-                    "total_types": total_types,
-                    "active_alerts": active_alerts,
-                    "last_loaded": (
-                        self.last_loaded.isoformat() if self.last_loaded else None
-                    ),
-                    "storage": "database",
-                    "alerts_enabled": self._config_cache.get("enable_alerts", "true"),
-                }
+            return {
+                "version": self._config_cache.get("version", "unknown"),
+                "total_sensors": total_sensors,
+                "total_types": total_types,
+                "active_alerts": active_alerts,
+                "last_loaded": (
+                    self.last_loaded.isoformat() if self.last_loaded else None
+                ),
+                "storage": "database",
+                "alerts_enabled": self._config_cache.get("enable_alerts", "true"),
+            }
         except Exception as e:
             logger.error(f"Error getting SS info: {e}")
             return {
@@ -539,175 +520,183 @@ class DatabaseSSManager:
                 "error": str(e),
             }
 
-    async def get_sensor_info(self, sensor_id: str) -> Optional[Dict]:
+    async def get_sensor_info(self, sensor_id: str, db: AsyncSession) -> Optional[Dict]:
         """Get sensor's SS information"""
         try:
-            sensor = await self._get_sensor(sensor_id)
+            sensor = await self._get_sensor(sensor_id, db)
             if not sensor:
                 return None
 
             # Get limits
-            async with self._get_db() as db:
-                result = await db.execute(
-                    select(SSSensorLimit).where(SSSensorLimit.sensor_id == sensor.id)
-                )
-                limits = result.scalars().all()
+            result = await db.execute(
+                select(SSSensorLimit).where(SSSensorLimit.sensor_id == sensor.id)
+            )
+            limits = result.scalars().all()
 
-                selected_limit = next(
-                    (limit for limit in limits if limit.is_selected), None
-                )
+            selected_limit = next(
+                (limit for limit in limits if limit.is_selected), None
+            )
 
-                return {
-                    "sensor_id": sensor_id,
+            return {
+                "sensor_id": sensor_id,
+                "pattern": sensor.pattern,
+                "sensor_type": (
+                    sensor.sensor_type_obj.name if sensor.sensor_type_obj else "unknown"
+                ),
+                "active": sensor.is_active,
+                "limit_name": selected_limit.name if selected_limit else None,
+                "limit_config": (
+                    selected_limit.to_dict(include_relationships=False)
+                    if selected_limit
+                    else None
+                ),
+                "all_limits": [
+                    limit.to_dict(include_relationships=False) for limit in limits
+                ],
+            }
+        except Exception as e:
+            logger.error(f"Error getting sensor info for {sensor_id}: {e}")
+            return None
+
+    async def get_all_sensors(
+        self, check_activeness: bool, db: AsyncSession
+    ) -> List[Dict]:
+        """Get all sensors"""
+        try:
+            query = select(SSSensor)
+            if check_activeness:
+                query = query.where(SSSensor.is_active == True)
+            query = query.options(
+                selectinload(SSSensor.sensor_type_obj),
+                selectinload(SSSensor.limits),
+                selectinload(SSSensor.alerts),
+            )
+            result = await db.execute(query)
+            sensors = result.scalars().all()
+
+            sensor_list = []
+            for sensor in sensors:
+                limits = sensor.limits if hasattr(sensor, "limits") else []
+                alerts = sensor.alerts if hasattr(sensor, "alerts") else []
+                selected_limit = next((l for l in limits if l.is_selected), None)
+
+                sensor_dict = {
+                    "id": sensor.id,
+                    "sensor_id": sensor.sensor_id,
                     "pattern": sensor.pattern,
                     "sensor_type": (
                         sensor.sensor_type_obj.name
                         if sensor.sensor_type_obj
                         else "unknown"
                     ),
-                    "active": sensor.is_active,
-                    "limit_name": selected_limit.name if selected_limit else None,
-                    "limit_config": (
-                        selected_limit.to_dict() if selected_limit else None
+                    "is_active": sensor.is_active,
+                    "limits": [
+                        limit.to_dict(include_relationships=False) for limit in limits
+                    ],
+                    "selected_limit": (
+                        selected_limit.to_dict(include_relationships=False)
+                        if selected_limit
+                        else None
                     ),
-                    "all_limits": [limit.to_dict() for limit in limits],
+                    "alerts": [
+                        alert.to_dict(include_relationships=False) for alert in alerts
+                    ],
+                    "created_at": (
+                        sensor.created_at.isoformat() if sensor.created_at else None
+                    ),
+                    "updated_at": (
+                        sensor.updated_at.isoformat() if sensor.updated_at else None
+                    ),
                 }
-        except Exception as e:
-            logger.error(f"Error getting sensor info for {sensor_id}: {e}")
-            return None
+                sensor_list.append(sensor_dict)
 
-    async def get_all_sensors(self, checkActiveness: bool) -> List[Dict]:
-        """Get all sensors"""
-        try:
-            async with self._get_db() as db:
-                query = select(SSSensor)
-                if checkActiveness == True:
-                    query = query.where(SSSensor.is_active == True)
-                query = query.options(
-                    selectinload(SSSensor.sensor_type_obj),
-                    selectinload(SSSensor.limits),
-                    selectinload(SSSensor.alerts),
-                )
-                result = await db.execute(query)
-                sensors = result.scalars().all()
-
-                sensor_list = []
-                for sensor in sensors:
-
-                    limits = sensor.limits if hasattr(sensor, "limits") else []
-                    alerts = sensor.alerts if hasattr(sensor, "alerts") else []
-                    selected_limit = next((l for l in limits if l.is_selected), None)
-
-                    sensor_dict = {
-                        "id": sensor.id,
-                        "sensor_id": sensor.sensor_id,
-                        "pattern": sensor.pattern,
-                        "sensor_type": (
-                            sensor.sensor_type_obj.name
-                            if sensor.sensor_type_obj
-                            else "unknown"
-                        ),
-                        "is_active": sensor.is_active,
-                        "limits": [limit.to_dict() for limit in limits],
-                        "selected_limit": (
-                            selected_limit.to_dict() if selected_limit else None
-                        ),
-                        "alerts": [alert.to_dict() for alert in alerts],
-                        "created_at": (
-                            sensor.created_at.isoformat() if sensor.created_at else None
-                        ),
-                        "updated_at": (
-                            sensor.updated_at.isoformat() if sensor.updated_at else None
-                        ),
-                    }
-                    sensor_list.append(sensor_dict)
-
-                return sensor_list
+            return sensor_list
         except Exception as e:
             logger.error(f"Error getting all sensors:\n{traceback.format_exc()}")
             return []
 
-    async def get_all_sensor_types(self) -> Dict[str, Dict]:
+    async def get_all_sensor_types(self, db: AsyncSession) -> Dict[str, Dict]:
         """Get all sensor types with caching"""
         now = datetime.now(timezone.utc)
         if (
             self._type_cache
-            and hasattr(self, "_type_cache_ts")
+            and self._type_cache_ts
             and now - self._type_cache_ts < self._cache_timeout
         ):
             return self._type_cache
 
         try:
-            async with self._get_db() as db:
-                result = await db.execute(select(SSSensorType))
-                types = result.scalars().all()
-                self._type_cache = {
-                    type_obj.name: type_obj.to_dict() for type_obj in types
-                }
-                self._type_cache_ts = now
-                return self._type_cache
+            result = await db.execute(select(SSSensorType))
+            types = result.scalars().all()
+            self._type_cache = {
+                type_obj.name: type_obj.to_dict(include_relationships=False)
+                for type_obj in types
+            }
+            self._type_cache_ts = now
+            return self._type_cache
         except Exception as e:
             logger.error(f"Error getting all sensor types: {e}")
             return {}
 
-    async def get_alerts(self, limit: int, include_resolved: bool) -> List[Dict]:
+    async def get_alerts(
+        self, limit: int, include_resolved: bool, db: AsyncSession
+    ) -> List[Dict]:
         """Get alerts"""
         try:
-            async with self._get_db() as db:
-                query = (
-                    select(SSAlert)
-                    .options(selectinload(SSAlert.sensor))  # <-- FIX
-                    .order_by(SSAlert.triggered_at.desc())
-                )
-                if not limit == 0:
-                    query.limit(limit)
-                if not include_resolved:
-                    query = query.where(SSAlert.is_resolved == False)
-                result = await db.execute(query)
-                alerts = result.scalars().all()
+            query = (
+                select(SSAlert)
+                .options(selectinload(SSAlert.sensor))
+                .order_by(SSAlert.triggered_at.desc())
+            )
+            if limit != 0:
+                query = query.limit(limit)
+            if not include_resolved:
+                query = query.where(SSAlert.is_resolved == False)
+            result = await db.execute(query)
+            alerts = result.scalars().all()
 
-                return [alert.to_dict() for alert in alerts]
+            return [alert.to_dict(include_relationships=True) for alert in alerts]
         except Exception as e:
-            logging.error(f"Error in get_recent_alerts:\n{traceback.format_exc()}")
+            logging.error(f"Error in get_alerts:\n{traceback.format_exc()}")
             return []
 
-    async def resolve_alert(self, alert_id: int):
+    async def resolve_alert(self, alert_id: int, db: AsyncSession):
         """Mark an alert as resolved"""
         try:
-            async with self._get_db() as db:
-                result = await db.execute(select(SSAlert).where(SSAlert.id == alert_id))
-                alert = result.scalars().first()
-                if alert:
-                    if alert.is_resolved == False:
-                        alert.is_resolved = True
-                        alert.resolved_at = datetime.now(timezone.utc)
-                        await db.commit()
-                        logger.info(f"Reverted alert {alert_id}")
-                    else:
-                        logger.warning(f"Alert {alert_id} is already resolved")
+            result = await db.execute(select(SSAlert).where(SSAlert.id == alert_id))
+            alert = result.scalars().first()
+            if alert:
+                if not alert.is_resolved:
+                    alert.is_resolved = True
+                    alert.resolved_at = datetime.now(timezone.utc)
+                    await db.flush()
+                    logger.info(f"Resolved alert {alert_id}")
                 else:
-                    logger.warning(f"Alert {alert_id} not found")
+                    logger.warning(f"Alert {alert_id} is already resolved")
+            else:
+                logger.warning(f"Alert {alert_id} not found")
         except Exception as e:
             logger.error(f"Error resolving alert {alert_id}: {e}")
+            raise
 
-    async def revert_alert(self, alert_id: int):
+    async def revert_alert(self, alert_id: int, db: AsyncSession):
         """Revert an alert resolve"""
         try:
-            async with self._get_db() as db:
-                result = await db.execute(select(SSAlert).where(SSAlert.id == alert_id))
-                alert = result.scalars().first()
-                if alert:
-                    if alert.is_resolved == True:
-                        alert.is_resolved = False
-                        alert.resolved_at = None
-                        await db.commit()
-                        logger.info(f"Reverted alert {alert_id}")
-                    else:
-                        logger.warning(f"Alert {alert_id} is already unresolved")
+            result = await db.execute(select(SSAlert).where(SSAlert.id == alert_id))
+            alert = result.scalars().first()
+            if alert:
+                if alert.is_resolved:
+                    alert.is_resolved = False
+                    alert.resolved_at = None
+                    await db.flush()
+                    logger.info(f"Reverted alert {alert_id}")
                 else:
-                    logger.warning(f"Alert {alert_id} not found")
+                    logger.warning(f"Alert {alert_id} is already unresolved")
+            else:
+                logger.warning(f"Alert {alert_id} not found")
         except Exception as e:
             logger.error(f"Error reverting alert {alert_id}: {e}")
+            raise
 
 
 # Global SS manager instance
@@ -719,10 +708,10 @@ def get_ss_manager() -> Optional[DatabaseSSManager]:
     return ss_manager
 
 
-async def init_ss_manager() -> DatabaseSSManager:
+async def init_ss_manager(db: AsyncSession) -> DatabaseSSManager:
     """Initialize global database-backed SS manager"""
     global ss_manager
     ss_manager = DatabaseSSManager()
-    await ss_manager._load_config()
+    await ss_manager._load_config(db)
     logger.info("Async database-backed SS manager initialized")
     return ss_manager
