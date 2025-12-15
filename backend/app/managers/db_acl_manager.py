@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.acl_models import ACLUser, ACLRole, ACLConfig, ACLAuditLog
+from app.database import get_db
 
 logger = logging.getLogger(__name__)
 
@@ -359,25 +360,28 @@ class DatabaseACLManager:
     # -------------------------------
     #   INFO ENDPOINTS
     # -------------------------------
-    async def get_acl_info(self, db: AsyncSession) -> Dict:
+    async def get_acl_info(self) -> Dict:
         """Get ACL system info"""
         try:
-            result = await db.execute(select(ACLUser).where(ACLUser.is_active == True))
-            total_users = len(result.scalars().all())
+            async with get_db as db:
+                result = await db.execute(
+                    select(ACLUser).where(ACLUser.is_active == True)
+                )
+                total_users = len(result.scalars().all())
 
-            result = await db.execute(select(ACLRole))
-            total_roles = len(result.scalars().all())
+                result = await db.execute(select(ACLRole))
+                total_roles = len(result.scalars().all())
 
-            return {
-                "version": self._config_cache.get("version", "unknown"),
-                "default_policy": getattr(self, "default_policy", "deny"),
-                "total_users": total_users,
-                "total_roles": total_roles,
-                "last_loaded": (
-                    self.last_loaded.isoformat() if self.last_loaded else None
-                ),
-                "storage": "database",
-            }
+                return {
+                    "version": self._config_cache.get("version", "unknown"),
+                    "default_policy": getattr(self, "default_policy", "deny"),
+                    "total_users": total_users,
+                    "total_roles": total_roles,
+                    "last_loaded": (
+                        self.last_loaded.isoformat() if self.last_loaded else None
+                    ),
+                    "storage": "database",
+                }
         except Exception as e:
             logger.error(f"Error getting ACL info: {e}")
             return {}

@@ -174,7 +174,7 @@ async def root():
         "environment": os.getenv("ENVIRONMENT", "development"),
         "storage": "postgresql",
         "features": {
-            "emqx_api": emqx.verify_connection(),
+            "emqx_api": await emqx.verify_connection(),
             "mqtt_connected": mqtt is not None,
             "mqtt_qos": mqtt.qos if mqtt else None,
             "acl_enabled": acl_mgr is not None,
@@ -207,7 +207,9 @@ async def health_check():
         "checks": {
             "database": "connected" if db_healthy else "disconnected",
             "mqtt": "connected" if mqtt else "disconnected",
-            "emqx": "connected" if emqx_auth.verify_connection() else "disconnected",
+            "emqx": (
+                "connected" if await emqx_auth.verify_connection() else "disconnected"
+            ),
             "acl": "enabled" if acl_mgr else "disabled",
             "ss": "enabled" if ss_mgr else "disabled",
             "user_sessions": (
@@ -224,8 +226,8 @@ async def health_check():
 if __name__ == "__main__":
     uvicorn.run(
         "main:app",
-        host=settings.host,
-        port=settings.port,
-        reload=settings.debug,
+        host=settings.HOST,
+        port=settings.PORT,
+        reload=settings.DEBUG,
         log_level=os.getenv("LOG_LEVEL", "info").lower(),
     )

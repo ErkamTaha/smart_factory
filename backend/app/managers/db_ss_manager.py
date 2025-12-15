@@ -20,6 +20,8 @@ from app.models.ss_models import (
     SSConfig,
 )
 
+from app.database import get_db
+
 logger = logging.getLogger(__name__)
 
 
@@ -476,36 +478,37 @@ class DatabaseSSManager:
             logger.error(f"Error updating sensor {sensor_id}: {e}")
             raise
 
-    async def get_ss_info(self, db: AsyncSession) -> Dict:
+    async def get_ss_info(self) -> Dict:
         """Get SS configuration info"""
         try:
-            # Count sensors
-            result = await db.execute(
-                select(SSSensor).where(SSSensor.is_active == True)
-            )
-            total_sensors = len(result.scalars().all())
+            async with get_db as db:
+                # Count sensors
+                result = await db.execute(
+                    select(SSSensor).where(SSSensor.is_active == True)
+                )
+                total_sensors = len(result.scalars().all())
 
-            # Count types
-            result = await db.execute(select(SSSensorType))
-            total_types = len(result.scalars().all())
+                # Count types
+                result = await db.execute(select(SSSensorType))
+                total_types = len(result.scalars().all())
 
-            # Count active alerts
-            result = await db.execute(
-                select(SSAlert).where(SSAlert.is_resolved == False)
-            )
-            active_alerts = len(result.scalars().all())
+                # Count active alerts
+                result = await db.execute(
+                    select(SSAlert).where(SSAlert.is_resolved == False)
+                )
+                active_alerts = len(result.scalars().all())
 
-            return {
-                "version": self._config_cache.get("version", "unknown"),
-                "total_sensors": total_sensors,
-                "total_types": total_types,
-                "active_alerts": active_alerts,
-                "last_loaded": (
-                    self.last_loaded.isoformat() if self.last_loaded else None
-                ),
-                "storage": "database",
-                "alerts_enabled": self._config_cache.get("enable_alerts", "true"),
-            }
+                return {
+                    "version": self._config_cache.get("version", "unknown"),
+                    "total_sensors": total_sensors,
+                    "total_types": total_types,
+                    "active_alerts": active_alerts,
+                    "last_loaded": (
+                        self.last_loaded.isoformat() if self.last_loaded else None
+                    ),
+                    "storage": "database",
+                    "alerts_enabled": self._config_cache.get("enable_alerts", "true"),
+                }
         except Exception as e:
             logger.error(f"Error getting SS info: {e}")
             return {
