@@ -25,9 +25,13 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
     return token
 
 
-def decode_access_token(token: str) -> dict | None:
+def decode_access_token(token: str) -> dict:
+    if not token:
+        raise ValueError("Missing token")
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        if "exp" in payload and payload["exp"] < datetime.now(timezone.utc).timestamp():
+            raise ValueError("Token expired")
         return payload
     except JWTError:
-        return None
+        raise ValueError("Invalid or malformed token")

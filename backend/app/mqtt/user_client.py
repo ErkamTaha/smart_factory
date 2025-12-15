@@ -1,3 +1,4 @@
+import ssl
 import paho.mqtt.client as mqtt
 from typing import Dict, Optional, Callable, List, Any, Tuple
 import json
@@ -5,9 +6,9 @@ import logging
 import asyncio
 from datetime import datetime, timezone
 from fastapi import WebSocket
-from app.security.db_acl_manager import get_acl_manager
+from app.managers.db_acl_manager import get_acl_manager
 from app.websocket.manager import get_websocket_manager
-from app.security.db_ss_manager import get_ss_manager
+from app.managers.db_ss_manager import get_ss_manager
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +58,14 @@ class UserMQTTClient:
             qos=1,
             retain=True,
         )
+
+        if self.broker_port == 8883:
+            self.client.tls_set(
+                ca_certs="certs/ca.crt",
+                certfile=None,  # Client cert if needed
+                keyfile=None,
+                tls_version=ssl.PROTOCOL_TLSv1_2,
+            )
 
         # Setup callbacks
         self.client.on_connect = self._on_connect

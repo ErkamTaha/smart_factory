@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 
 from app.database.database import init_database, test_connection
+from app.mqtt.emqx_auth import init_emqx_auth_manager, get_emqx_auth_manager
 from app.mqtt.client import init_mqtt_client, get_mqtt_client
 from backend.app.mqtt.user_client import init_user_mqtt_manager, get_user_mqtt_manager
 from app.websocket.manager import get_websocket_manager
@@ -77,7 +78,7 @@ async def lifespan(app: FastAPI):
 
         # Subscribe to sensor topics
         mqtt.subscribe(
-            f"{settings.mqtt_topic_prefix}/sensors/#", mqtt.handle_sensor_message, qos=1
+            f"{settings.MQTT_TOPIC_PREFIX}/sensors/#", mqtt.handle_sensor_message, qos=1
         )
         logger.info("✅ Shared MQTT client initialized")
     except Exception as e:
@@ -96,6 +97,23 @@ async def lifespan(app: FastAPI):
         logger.info("✅ Per-user MQTT manager initialized")
     except Exception as e:
         logger.error(f"❌ Failed to initialize per-user MQTT manager: {e}")
+
+    # Initialize EMQX Auth Manager
+    try:
+        logger.info("🔐 Initializing EMQX Auth Manager...")
+        emqx_auth = init_emqx_auth_manager(
+            api_url=settings.EMQX_API_URL,
+            api_key=settings.EMQX_API_KEY,
+            api_secret=settings.EMQX_API_SECRET,
+        )
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize EMQX Auth manager: {e}")
+
+    # Verify EMQX connection
+    if await emqx_auth.verify_connection():
+        logger.info("✅ EMQX API connected successfully")
+    else:
+        logger.warning("⚠️  EMQX API connection failed - MQTT auth may not work")
 
     logger.info("🎉 Smart Factory Backend started successfully!")
 
@@ -148,6 +166,7 @@ async def root():
     acl_mgr = get_acl_manager()
     ss_mgr = get_ss_manager()
     mqtt = get_mqtt_client()
+    emqx = get_emqx_auth_manager()
 
     return {
         "message": "Smart Factory API is running! 🏭",
@@ -156,6 +175,7 @@ async def root():
         "environment": os.getenv("ENVIRONMENT", "development"),
         "storage": "postgresql",
         "features": {
+            "emqx_api": emqx.verify_connection(),
             "mqtt_connected": mqtt is not None,
             "mqtt_qos": mqtt.qos if mqtt else None,
             "acl_enabled": acl_mgr is not None,
@@ -175,6 +195,7 @@ async def health_check():
     """Comprehensive health check endpoint"""
     db_healthy = await test_connection()
     mqtt = get_mqtt_client()
+    emqx_auth = get_emqx_auth_manager()
     user_mqtt_mgr = get_user_mqtt_manager()
     acl_mgr = get_acl_manager()
     ss_mgr = get_ss_manager()
@@ -187,6 +208,7 @@ async def health_check():
         "checks": {
             "database": "connected" if db_healthy else "disconnected",
             "mqtt": "connected" if mqtt else "disconnected",
+            "emqx": "connected" if emqx_auth.verify_connection() else "disconnected",
             "acl": "enabled" if acl_mgr else "disabled",
             "ss": "enabled" if ss_mgr else "disabled",
             "user_sessions": (

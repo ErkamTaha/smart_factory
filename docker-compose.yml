@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # PostgreSQL Database
   postgres:
@@ -23,25 +21,60 @@ services:
       timeout: 5s
       retries: 5
 
-  # MQTT Broker
-  mosquitto:
-    image: eclipse-mosquitto:latest
-    container_name: smartfactory_mosquitto
+  # EMQX MQTT Broker (Replaced Mosquitto)
+  emqx:
+    image: emqx/emqx:5.5.0
+    container_name: smartfactory_emqx
+    hostname: smartfactory_emqx
     restart: unless-stopped
     ports:
-      - "1883:1883"
-      - "9001:9001"
+      - "1883:1883" # MQTT TCP
+      - "8083:8083" # MQTT WebSocket
+      - "8883:8883" # MQTT SSL/TLS
+      - "18083:18083" # Dashboard & HTTP API
+    environment:
+      - EMQX_LISTENERS__SSL__DEFAULT__BIND=0.0.0.0:8883
+      - EMQX_LISTENERS__SSL__DEFAULT__SSL_OPTIONS__CERTFILE=/opt/emqx/etc/certs/server.crt
+      - EMQX_LISTENERS__SSL__DEFAULT__SSL_OPTIONS__KEYFILE=/opt/emqx/etc/certs/server.key
+      - EMQX_LISTENERS__SSL__DEFAULT__SSL_OPTIONS__CACERTFILE=/opt/emqx/etc/certs/ca.crt
+      - EMQX_LISTENERS__SSL__DEFAULT__SSL_OPTIONS__VERIFY=verify_none
+      - EMQX_LISTENERS__SSL__DEFAULT__SSL_OPTIONS__FAIL_IF_NO_PEER_CERT=false
+
+      - EMQX_LISTENERS__WSS__DEFAULT__BIND=0.0.0.0:8084
+      - EMQX_LISTENERS__WSS__DEFAULT__SSL_OPTIONS__CERTFILE=/opt/emqx/etc/certs/server.crt
+      - EMQX_LISTENERS__WSS__DEFAULT__SSL_OPTIONS__KEYFILE=/opt/emqx/etc/certs/server.key
+
+      # Dashboard credentials
+      - EMQX_DASHBOARD__DEFAULT_USERNAME=admin
+      - EMQX_DASHBOARD__DEFAULT_PASSWORD=smartfactory_admin_2024
+
+      # Security settings
+      - EMQX_ALLOW_ANONYMOUS=false
+
+      # Node name
+      - EMQX_NODE__NAME=emqx@smartfactory_emqx
+      - EMQX_NODE__COOKIE=secret_cookie
+
+      # Log level
+      - EMQX_LOG__CONSOLE__LEVEL=info
+
+      # Listeners
+      - EMQX_LISTENERS__TCP__DEFAULT__BIND=0.0.0.0:1883
+      - EMQX_LISTENERS__WS__DEFAULT__BIND=0.0.0.0:8083
     volumes:
-      - ./infrastructure/mosquitto/config:/mosquitto/config
-      - mosquitto_data:/mosquitto/data
-      - mosquitto_log:/mosquitto/log
+      - emqx_data:/opt/emqx/data
+      - emqx_log:/opt/emqx/log
+      - ./certs/ca.crt:/opt/emqx/etc/certs/ca.crt
+      - ./certs/server.crt:/opt/emqx/etc/certs/server.crt
+      - ./certs/server.key:/opt/emqx/etc/certs/server.key
     networks:
       - smartfactory_net
     healthcheck:
-      test: [ "CMD-SHELL", "mosquitto_sub -h localhost -t '$$SYS/#' -C 1 -W 3" ]
-      interval: 15s
-      timeout: 10s
-      retries: 3
+      test: [ "CMD-SHELL", "ps aux | grep -v grep | grep -q 'emqx.*-name emqx@' || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   # Redis Cache
   redis:
@@ -72,13 +105,31 @@ services:
     ports:
       - "8000:8000"
     environment:
+      # Database
       - DATABASE_URL=postgresql+asyncpg://smartfactory:password123@postgres:5432/smartfactory
-      - MQTT_BROKER_HOST=mosquitto
-      - MQTT_BROKER_PORT=1883
+
+      # MQTT/EMQX Configuration
+      - MQTT_BROKER_HOST=emqx
+      - MQTT_BROKER_PORT=8883
+      - MQTT_TLS_ENABLED=true
+
+      # EMQX HTTP API Configuration
+      - EMQX_API_URL=http://emqx:18083
+      - EMQX_API_KEY=admin
+      - EMQX_API_SECRET=smartfactory_admin_2024
+
+      # Redis
       - REDIS_URL=redis://redis:6379
+
+      # Application
       - ENVIRONMENT=development
       - DEBUG=true
       - LOG_LEVEL=INFO
+
+      # Security
+      - SECRET_KEY=your-secret-key-change-in-production
+      - ALGORITHM=HS256
+      - ACCESS_TOKEN_EXPIRE_MINUTES=30
     volumes:
       - ./backend:/app
       - backend_logs:/app/logs
@@ -88,7 +139,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      mosquitto:
+      emqx:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -111,7 +162,7 @@ services:
       - "3000:3000"
     environment:
       - VITE_API_BASE_URL=http://localhost:8000
-      - VITE_WS_URL=ws://localhost:8000
+      - VITE_WS_URL=wss://localhost:8084
       - CHOKIDAR_USEPOLLING=true
       - CHOKIDAR_INTERVAL=200
     volumes:
@@ -148,9 +199,9 @@ services:
 volumes:
   postgres_data:
     driver: local
-  mosquitto_data:
+  emqx_data:
     driver: local
-  mosquitto_log:
+  emqx_log:
     driver: local
   redis_data:
     driver: local

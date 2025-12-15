@@ -31,3 +31,6 @@ pytest-asyncio==0.21.1
 
 # Additional utilities
 python-dotenv==1.0.0
+
+# For EMQX HTTP API calls
+httpx>=0.24.1

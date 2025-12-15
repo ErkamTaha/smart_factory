@@ -14,7 +14,7 @@ class WebSocketManager:
 
     async def connect(self, websocket: WebSocket, user_id: str):
         """Accept a new WebSocket connection"""
-        await websocket.accept()
+        await websocket.accept(subprotocol="access_token")
         self.active_connections[user_id] = websocket
         logger.info(
             f"WebSocket connected. Total connections: {len(self.active_connections)}"
