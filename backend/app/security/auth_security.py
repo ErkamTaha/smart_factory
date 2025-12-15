@@ -2,7 +2,7 @@
 from passlib.context import CryptContext
 from datetime import datetime, timedelta, timezone
 from jose import jwt, JWTError
-from app.config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE
+from app.config import settings
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -18,10 +18,10 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + (
-        expires_delta if expires_delta else ACCESS_TOKEN_EXPIRE
+        expires_delta if expires_delta else settings.ACCESS_TOKEN_EXPIRE
     )
     to_encode.update({"exp": expire})
-    token = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    token = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return token
 
 
@@ -29,7 +29,9 @@ def decode_access_token(token: str) -> dict:
     if not token:
         raise ValueError("Missing token")
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(
+            token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
+        )
         if "exp" in payload and payload["exp"] < datetime.now(timezone.utc).timestamp():
             raise ValueError("Token expired")
         return payload

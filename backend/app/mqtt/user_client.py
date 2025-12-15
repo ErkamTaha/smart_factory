@@ -26,6 +26,8 @@ class UserMQTTClient:
         username: Optional[str] = None,
         password: Optional[str] = None,
         qos: int = 1,
+        tls_enabled: bool = False,
+        ca_certs: Optional[str] = None,
     ):
         self.user_id = user_id
         self.broker_host = broker_host
@@ -35,6 +37,8 @@ class UserMQTTClient:
         self.username = username
         self.password = password
         self.qos = qos  # Default QoS level
+        self.tls_enabled = tls_enabled
+        self.ca_certs = ca_certs
 
         # Create unique MQTT client ID for this user
         client_id = f"smart_factory_user_{user_id}_{id(self)}"
@@ -59,14 +63,6 @@ class UserMQTTClient:
             retain=True,
         )
 
-        if self.broker_port == 8883:
-            self.client.tls_set(
-                ca_certs="certs/ca.crt",
-                certfile=None,  # Client cert if needed
-                keyfile=None,
-                tls_version=ssl.PROTOCOL_TLSv1_2,
-            )
-
         # Setup callbacks
         self.client.on_connect = self._on_connect
         self.client.on_disconnect = self._on_disconnect
@@ -76,7 +72,34 @@ class UserMQTTClient:
         if username and password:
             self.client.username_pw_set(username, password)
 
-        logger.info(f"Created MQTT client for user: {user_id} with QoS {qos}")
+        # Configure TLS if enabled
+
+        if tls_enabled and broker_port == 8883:
+
+            try:
+
+                self.client.tls_set(
+                    ca_certs=ca_certs,
+                    certfile=None,  # Client cert not needed for server auth only
+                    keyfile=None,
+                    tls_version=ssl.PROTOCOL_TLS,
+                )
+
+                # Don't verify hostname for self-signed certs
+
+                self.client.tls_insecure_set(True)
+
+                logger.info(f"TLS enabled for user {user_id} with ca_certs: {ca_certs}")
+
+            except Exception as e:
+
+                logger.error(f"Failed to setup TLS for user {user_id}: {e}")
+
+                raise
+
+        logger.info(
+            f"Created MQTT client for user: {user_id} with QoS {qos}, TLS: {tls_enabled}"
+        )
 
     def _check_acl_permission(self, topic: str, action: str) -> bool:
         """Check if user has permission using ACL"""
@@ -470,12 +493,16 @@ class UserMQTTClientManager:
         username: Optional[str] = None,
         password: Optional[str] = None,
         qos: int = 1,
+        tls_enabled: bool = False,
+        ca_certs: Optional[str] = None,
     ):
         self.broker_host = broker_host
         self.broker_port = broker_port
         self.username = username
         self.password = password
         self.qos = qos  # Default QoS for all user clients
+        self.tls_enabled = tls_enabled
+        self.ca_certs = ca_certs
         self.user_clients: Dict[str, UserMQTTClient] = {}
         self.main_loop = None
 
@@ -509,6 +536,8 @@ class UserMQTTClientManager:
             username=self.username,
             password=self.password,
             qos=client_qos,
+            tls_enabled=self.tls_enabled,
+            ca_certs=self.ca_certs,
         )
 
         # Connect to MQTT broker
@@ -573,12 +602,14 @@ def init_user_mqtt_manager(
     username: Optional[str] = None,
     password: Optional[str] = None,
     qos: int = 1,
+    tls_enabled: bool = False,
+    ca_certs: Optional[str] = None,
 ) -> UserMQTTClientManager:
     """
     Initialize global user MQTT manager
     """
     global user_mqtt_manager
     user_mqtt_manager = UserMQTTClientManager(
-        broker_host, broker_port, username, password, qos
+        broker_host, broker_port, username, password, qos, tls_enabled, ca_certs
     )
     return user_mqtt_manager

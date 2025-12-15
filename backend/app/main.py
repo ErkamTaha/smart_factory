@@ -14,13 +14,13 @@ from pathlib import Path
 from app.database.database import init_database, test_connection
 from app.mqtt.emqx_auth import init_emqx_auth_manager, get_emqx_auth_manager
 from app.mqtt.client import init_mqtt_client, get_mqtt_client
-from backend.app.mqtt.user_client import init_user_mqtt_manager, get_user_mqtt_manager
+from app.mqtt.user_client import init_user_mqtt_manager, get_user_mqtt_manager
 from app.websocket.manager import get_websocket_manager
 from app.managers.db_acl_manager import init_acl_manager, get_acl_manager
 from app.managers.db_ss_manager import init_ss_manager, get_ss_manager
-from backend.app.routes import websocket_router
+from app.routes import websocket_router
 from app.config import settings
-from backend.app.routes import acl_router, mqtt_router, ss_router
+from app.routes import acl_router, mqtt_router, ss_router
 
 # Configure logging
 logging.basicConfig(
@@ -67,11 +67,13 @@ async def lifespan(app: FastAPI):
     ws_manager = get_websocket_manager()
     try:
         mqtt = init_mqtt_client(
-            broker_host=settings.mqtt_broker_host,
-            broker_port=settings.mqtt_broker_port,
-            username=settings.mqtt_username,
-            password=settings.mqtt_password,
+            broker_host=settings.MQTT_BROKER_HOST,
+            broker_port=settings.MQTT_BROKER_PORT,
+            username=settings.MQTT_USERNAME,
+            password=settings.MQTT_PASSWORD,
             qos=1,
+            tls_enabled=settings.MQTT_TLS_ENABLED,
+            ca_certs=settings.MQTT_CA_CERTS if settings.MQTT_CA_CERTS else None,
         )
         mqtt.set_websocket_manager(ws_manager)
         mqtt.connect()

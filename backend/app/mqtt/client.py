@@ -4,6 +4,7 @@ import json
 import logging
 import asyncio
 import threading
+import ssl
 from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
@@ -17,12 +18,16 @@ class MQTTClient:
         username: Optional[str] = None,
         password: Optional[str] = None,
         qos: int = 1,
+        tls_enabled: bool = False,
+        ca_certs: Optional[str] = None,
     ):
         self.broker_host = broker_host
         self.broker_port = broker_port
         self.username = username
         self.password = password
         self.qos = qos  # Default QoS level for this client
+        self.tls_enabled = tls_enabled
+        self.ca_certs = ca_certs
         self.client = mqtt.Client(client_id="smart_factory_backend")
         self.subscriptions: Dict[str, List[Callable]] = {}
         self.websocket_manager = None  # Will be set from main.py
@@ -52,6 +57,33 @@ class MQTTClient:
         # Set credentials if provided
         if username and password:
             self.client.username_pw_set(username, password)
+
+        # Configure TLS if enabled
+
+        if tls_enabled and broker_port == 8883:
+
+            try:
+
+                self.client.tls_set(
+                    ca_certs=ca_certs,
+                    certfile=None,
+                    keyfile=None,
+                    tls_version=ssl.PROTOCOL_TLS,
+                )
+
+                # Don't verify hostname for self-signed certs
+
+                self.client.tls_insecure_set(True)
+
+                logger.info(
+                    f"TLS enabled for backend MQTT client with ca_certs: {ca_certs}"
+                )
+
+            except Exception as e:
+
+                logger.error(f"Failed to setup TLS for backend MQTT client: {e}")
+
+                raise
 
     def set_websocket_manager(self, websocket_manager):
         """Set WebSocket manager for broadcasting"""
@@ -274,7 +306,11 @@ def init_mqtt_client(
     username: Optional[str] = None,
     password: Optional[str] = None,
     qos: int = 1,
+    tls_enabled: bool = False,
+    ca_certs: Optional[str] = None,
 ) -> MQTTClient:
     global mqtt_client
-    mqtt_client = MQTTClient(broker_host, broker_port, username, password, qos)
+    mqtt_client = MQTTClient(
+        broker_host, broker_port, username, password, qos, tls_enabled, ca_certs
+    )
     return mqtt_client

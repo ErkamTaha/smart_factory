@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     MQTT_BROKER_PORT: int = int(os.getenv("MQTT_BROKER_PORT", "1883"))
     MQTT_DEFAULT_QOS: int = 1
     MQTT_TOPIC_PREFIX: str = "sf"
+    MQTT_TLS_ENABLED: bool = False
+    MQTT_CA_CERTS: str = "/app/certs/ca.crt"
+    MQTT_USERNAME: str = "smartfactory"
+    MQTT_PASSWORD: str = "mqtt123"
 
     # EMQX HTTP API Configuration
     EMQX_API_URL: str = os.getenv("EMQX_API_URL", "http://localhost:18083")
@@ -59,6 +63,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
+        extra = "ignore"  # Ignore extra environment variables
 
 
 settings = Settings()
