@@ -40,7 +40,7 @@ async def lifespan(app: FastAPI):
 
     # Initialize database
     try:
-        await init_database()
+        db = await init_database()
         logger.info("✅ Database initialized successfully")
     except Exception as e:
         logger.error(f"❌ Failed to initialize database: {e}")
@@ -51,14 +51,14 @@ async def lifespan(app: FastAPI):
 
     # Initialize ACL Manager
     try:
-        acl_mgr = await init_acl_manager()
+        acl_mgr = await init_acl_manager(db)
         logger.info("✅ Database-backed ACL manager initialized")
     except Exception as e:
         logger.error(f"❌ Failed to initialize ACL manager: {e}")
 
     # Initialize SS Manager
     try:
-        ss_mgr = await init_ss_manager()
+        ss_mgr = await init_ss_manager(db)
         logger.info("✅ Database-backed SS manager initialized")
     except Exception as e:
         logger.error(f"❌ Failed to initialize SS manager: {e}")
@@ -77,11 +77,6 @@ async def lifespan(app: FastAPI):
         )
         mqtt.set_websocket_manager(ws_manager)
         mqtt.connect()
-
-        # Subscribe to sensor topics
-        mqtt.subscribe(
-            f"{settings.MQTT_TOPIC_PREFIX}/sensors/#", mqtt.handle_sensor_message, qos=1
-        )
         logger.info("✅ Shared MQTT client initialized")
     except Exception as e:
         logger.error(f"❌ Failed to initialize MQTT client: {e}")
@@ -89,11 +84,13 @@ async def lifespan(app: FastAPI):
     # Initialize per-user MQTT manager
     try:
         user_mqtt_mgr = init_user_mqtt_manager(
-            broker_host=settings.mqtt_broker_host,
-            broker_port=settings.mqtt_broker_port,
-            username=settings.mqtt_username,
-            password=settings.mqtt_password,
+            broker_host=settings.MQTT_BROKER_HOST,
+            broker_port=settings.MQTT_BROKER_PORT,
+            username=settings.MQTT_USERNAME,
+            password=settings.MQTT_PASSWORD,
             qos=1,
+            tls_enabled=settings.MQTT_TLS_ENABLED,
+            ca_certs=settings.MQTT_CA_CERTS if settings.MQTT_CA_CERTS else None,
         )
         user_mqtt_mgr.set_main_loop(main_loop)
         logger.info("✅ Per-user MQTT manager initialized")

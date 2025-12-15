@@ -54,7 +54,7 @@ async def get_db():
             raise
 
 
-async def init_database():
+async def init_database() -> AsyncSession:
     """Initialize database - create all tables (async version)"""
     try:
         # Import all models so SQLAlchemy registers them
@@ -73,6 +73,7 @@ async def init_database():
 
             async with get_db as db:
                 await create_default_data(db)
+                return db
         except Exception as e:
             logger.error(f"Error creating default data: {e}")
 
