@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.acl_models import ACLUser, ACLRole, ACLConfig, ACLAuditLog
-from app.database import get_db
+from app.database import SessionLocal
 
 logger = logging.getLogger(__name__)
 
@@ -363,7 +363,7 @@ class DatabaseACLManager:
     async def get_acl_info(self) -> Dict:
         """Get ACL system info"""
         try:
-            async with get_db as db:
+            async with SessionLocal as db:
                 result = await db.execute(
                     select(ACLUser).where(ACLUser.is_active == True)
                 )

@@ -20,7 +20,7 @@ from app.models.ss_models import (
     SSConfig,
 )
 
-from app.database import get_db
+from app.database import SessionLocal
 
 logger = logging.getLogger(__name__)
 
@@ -481,7 +481,7 @@ class DatabaseSSManager:
     async def get_ss_info(self) -> Dict:
         """Get SS configuration info"""
         try:
-            async with get_db as db:
+            async with SessionLocal as db:
                 # Count sensors
                 result = await db.execute(
                     select(SSSensor).where(SSSensor.is_active == True)
