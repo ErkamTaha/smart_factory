@@ -138,6 +138,9 @@ async def websocket_endpoint(websocket: WebSocket, db: AsyncSession = Depends(ge
         mqtt_manager.remove_user_client(user_id)
         logger.info(f"Cleaned up MQTT session for user {user_id}")
 
+        # Clean up: remove WebSocket connection
+        ws_manager.disconnect(user_id)
+
         # Note: We keep MQTT credentials in EMQX for faster reconnection
         # They will be reused on next connection
         logger.info(f"MQTT credentials kept for future reconnection: {mqtt_username}")

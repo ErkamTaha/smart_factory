@@ -9,8 +9,8 @@ logger = logging.getLogger(__name__)
 
 class WebSocketManager:
     def __init__(self):
-        # Store active WebSocket connections
-        self.active_connections: List[WebSocket] = []
+        # Store active WebSocket connections by user_id
+        self.active_connections: Dict[str, WebSocket] = {}
 
     async def connect(self, websocket: WebSocket, user_id: str):
         """Accept a new WebSocket connection"""
@@ -20,10 +20,10 @@ class WebSocketManager:
             f"WebSocket connected. Total connections: {len(self.active_connections)}"
         )
 
-    def disconnect(self, websocket: WebSocket):
+    def disconnect(self, user_id: str):
         """Remove a WebSocket connection"""
-        if websocket in self.active_connections:
-            self.active_connections.remove(websocket)
+        if user_id in self.active_connections:
+            del self.active_connections[user_id]
             logger.info(
                 f"WebSocket disconnected. Total connections: {len(self.active_connections)}"
             )
@@ -31,23 +31,26 @@ class WebSocketManager:
     async def send_personal_message(self, message: Dict[str, Any], user_id: str):
         """Send message to a specific WebSocket connection"""
         try:
-            if user_id in self.active_connections:
-                websocket = self.active_connections[user_id]
+            if user_id not in self.active_connections:
+                logger.warning(f"User {user_id} not connected")
+                return
+
+            websocket = self.active_connections[user_id]
             # Convert to JSON string if it's a dictionary
             if isinstance(message, dict):
                 message_str = json.dumps(message)
             else:
                 message_str = str(message)
-            await websocket.send_json(message_str)
+            await websocket.send_text(message_str)
         except Exception as e:
-            logger.error(f"Error sending personal message: {e}")
+            logger.error(f"Error sending personal message to user {user_id}: {e}")
             # Remove broken connection
-            self.disconnect(websocket)
+            self.disconnect(user_id)
 
     async def broadcast(self, message: Dict[str, Any]):
         """Send message to all connected WebSocket clients"""
         if not self.active_connections:
-            logger.warning("No connections")
+            logger.debug("No active connections to broadcast to")
             return
 
         # Convert to JSON string if needed
@@ -57,17 +60,17 @@ class WebSocketManager:
             message_str = str(message)
 
         # Send to all connections, remove broken ones
-        broken_connections = []
-        for connection in self.active_connections:
+        broken_user_ids = []
+        for user_id, connection in self.active_connections.items():
             try:
                 await connection.send_text(message_str)
             except Exception as e:
-                logger.error(f"Error broadcasting to connection: {e}")
-                broken_connections.append(connection)
+                logger.error(f"Error broadcasting to user {user_id}: {e}")
+                broken_user_ids.append(user_id)
 
         # Clean up broken connections
-        for broken_connection in broken_connections:
-            self.disconnect(broken_connection)
+        for broken_user_id in broken_user_ids:
+            self.disconnect(broken_user_id)
 
     async def broadcast_sensor_data(
         self, topic: str, data: Dict[str, Any], qos, retain
