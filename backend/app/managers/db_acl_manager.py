@@ -30,15 +30,17 @@ class DatabaseACLManager:
     # -------------------------------
     #   CONFIG LOADING
     # -------------------------------
-    async def _load_config(self, db: AsyncSession):
+    async def _load_config(self):
         """Load ACL configuration from database"""
         try:
-            result = await db.execute(select(ACLConfig))
-            configs = result.scalars().all()
-            self._config_cache = {c.key: c.value for c in configs}
-            self.default_policy = self._config_cache.get("default_policy", "deny")
-            self.last_loaded = datetime.now(timezone.utc)
-            logger.info(f"ACL config loaded, default_policy={self.default_policy}")
+            session = SessionLocal()
+            async with session as db:
+                result = await db.execute(select(ACLConfig))
+                configs = result.scalars().all()
+                self._config_cache = {c.key: c.value for c in configs}
+                self.default_policy = self._config_cache.get("default_policy", "deny")
+                self.last_loaded = datetime.now(timezone.utc)
+                logger.info(f"ACL config loaded, default_policy={self.default_policy}")
         except Exception as e:
             logger.error(f"Error loading ACL config: {e}")
             self.default_policy = "deny"
@@ -360,28 +362,25 @@ class DatabaseACLManager:
     # -------------------------------
     #   INFO ENDPOINTS
     # -------------------------------
-    async def get_acl_info(self) -> Dict:
+    async def get_acl_info(self, db: AsyncSession) -> Dict:
         """Get ACL system info"""
         try:
-            async with SessionLocal as db:
-                result = await db.execute(
-                    select(ACLUser).where(ACLUser.is_active == True)
-                )
-                total_users = len(result.scalars().all())
+            result = await db.execute(select(ACLUser).where(ACLUser.is_active == True))
+            total_users = len(result.scalars().all())
 
-                result = await db.execute(select(ACLRole))
-                total_roles = len(result.scalars().all())
+            result = await db.execute(select(ACLRole))
+            total_roles = len(result.scalars().all())
 
-                return {
-                    "version": self._config_cache.get("version", "unknown"),
-                    "default_policy": getattr(self, "default_policy", "deny"),
-                    "total_users": total_users,
-                    "total_roles": total_roles,
-                    "last_loaded": (
-                        self.last_loaded.isoformat() if self.last_loaded else None
-                    ),
-                    "storage": "database",
-                }
+            return {
+                "version": self._config_cache.get("version", "unknown"),
+                "default_policy": getattr(self, "default_policy", "deny"),
+                "total_users": total_users,
+                "total_roles": total_roles,
+                "last_loaded": (
+                    self.last_loaded.isoformat() if self.last_loaded else None
+                ),
+                "storage": "database",
+            }
         except Exception as e:
             logger.error(f"Error getting ACL info: {e}")
             return {}
@@ -462,10 +461,10 @@ def get_acl_manager() -> Optional[DatabaseACLManager]:
     return acl_manager
 
 
-async def init_acl_manager(db: AsyncSession) -> DatabaseACLManager:
+async def init_acl_manager() -> DatabaseACLManager:
     """Initialize global database-backed ACL manager"""
     global acl_manager
     acl_manager = DatabaseACLManager()
-    await acl_manager._load_config(db)
+    await acl_manager._load_config()
     logger.info("Async database-backed ACL manager initialized")
     return acl_manager

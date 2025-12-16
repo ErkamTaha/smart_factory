@@ -38,30 +38,32 @@ class DatabaseSSManager:
         self._type_cache: Dict[str, Dict] = {}
         self._type_cache_ts: Optional[datetime] = None
 
-    async def _load_config(self, db: AsyncSession):
+    async def _load_config(self):
         """Load SS configuration from database"""
         try:
             logger.info("Loading SS configuration from database")
 
             # Load configuration
-            result = await db.execute(select(SSConfig))
-            configs = result.scalars().all()
-            self._config_cache = {config.key: config.value for config in configs}
+            session = SessionLocal()
+            async with session as db:
+                result = await db.execute(select(SSConfig))
+                configs = result.scalars().all()
+                self._config_cache = {config.key: config.value for config in configs}
 
-            self.last_loaded = datetime.now(timezone.utc)
+                self.last_loaded = datetime.now(timezone.utc)
 
-            # Count sensors and types for logging
-            sensor_count_result = await db.execute(
-                select(SSSensor).where(SSSensor.is_active == True)
-            )
-            sensor_count = len(sensor_count_result.scalars().all())
+                # Count sensors and types for logging
+                sensor_count_result = await db.execute(
+                    select(SSSensor).where(SSSensor.is_active == True)
+                )
+                sensor_count = len(sensor_count_result.scalars().all())
 
-            type_count_result = await db.execute(select(SSSensorType))
-            type_count = len(type_count_result.scalars().all())
+                type_count_result = await db.execute(select(SSSensorType))
+                type_count = len(type_count_result.scalars().all())
 
-            logger.info(
-                f"SS loaded from database: {sensor_count} sensors, {type_count} types"
-            )
+                logger.info(
+                    f"SS loaded from database: {sensor_count} sensors, {type_count} types"
+                )
 
         except Exception as e:
             logger.error(f"Error loading SS from database: {e}")
@@ -478,37 +480,36 @@ class DatabaseSSManager:
             logger.error(f"Error updating sensor {sensor_id}: {e}")
             raise
 
-    async def get_ss_info(self) -> Dict:
+    async def get_ss_info(self, db: AsyncSession) -> Dict:
         """Get SS configuration info"""
         try:
-            async with SessionLocal as db:
-                # Count sensors
-                result = await db.execute(
-                    select(SSSensor).where(SSSensor.is_active == True)
-                )
-                total_sensors = len(result.scalars().all())
+            # Count sensors
+            result = await db.execute(
+                select(SSSensor).where(SSSensor.is_active == True)
+            )
+            total_sensors = len(result.scalars().all())
 
-                # Count types
-                result = await db.execute(select(SSSensorType))
-                total_types = len(result.scalars().all())
+            # Count types
+            result = await db.execute(select(SSSensorType))
+            total_types = len(result.scalars().all())
 
-                # Count active alerts
-                result = await db.execute(
-                    select(SSAlert).where(SSAlert.is_resolved == False)
-                )
-                active_alerts = len(result.scalars().all())
+            # Count active alerts
+            result = await db.execute(
+                select(SSAlert).where(SSAlert.is_resolved == False)
+            )
+            active_alerts = len(result.scalars().all())
 
-                return {
-                    "version": self._config_cache.get("version", "unknown"),
-                    "total_sensors": total_sensors,
-                    "total_types": total_types,
-                    "active_alerts": active_alerts,
-                    "last_loaded": (
-                        self.last_loaded.isoformat() if self.last_loaded else None
-                    ),
-                    "storage": "database",
-                    "alerts_enabled": self._config_cache.get("enable_alerts", "true"),
-                }
+            return {
+                "version": self._config_cache.get("version", "unknown"),
+                "total_sensors": total_sensors,
+                "total_types": total_types,
+                "active_alerts": active_alerts,
+                "last_loaded": (
+                    self.last_loaded.isoformat() if self.last_loaded else None
+                ),
+                "storage": "database",
+                "alerts_enabled": self._config_cache.get("enable_alerts", "true"),
+            }
         except Exception as e:
             logger.error(f"Error getting SS info: {e}")
             return {
@@ -711,10 +712,10 @@ def get_ss_manager() -> Optional[DatabaseSSManager]:
     return ss_manager
 
 
-async def init_ss_manager(db: AsyncSession) -> DatabaseSSManager:
+async def init_ss_manager() -> DatabaseSSManager:
     """Initialize global database-backed SS manager"""
     global ss_manager
     ss_manager = DatabaseSSManager()
-    await ss_manager._load_config(db)
+    await ss_manager._load_config()
     logger.info("Async database-backed SS manager initialized")
     return ss_manager

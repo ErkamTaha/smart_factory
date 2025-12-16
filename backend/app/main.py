@@ -12,6 +12,8 @@ import os
 from pathlib import Path
 
 from app.database.database import init_database, test_connection
+from app.database import get_db
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.mqtt.emqx_auth import init_emqx_auth_manager, get_emqx_auth_manager
 from app.mqtt.client import init_mqtt_client, get_mqtt_client
 from app.mqtt.user_client import init_user_mqtt_manager, get_user_mqtt_manager
@@ -40,7 +42,7 @@ async def lifespan(app: FastAPI):
 
     # Initialize database
     try:
-        db = await init_database()
+        await init_database()
         logger.info("✅ Database initialized successfully")
     except Exception as e:
         logger.error(f"❌ Failed to initialize database: {e}")
@@ -51,14 +53,14 @@ async def lifespan(app: FastAPI):
 
     # Initialize ACL Manager
     try:
-        acl_mgr = await init_acl_manager(db)
+        acl_mgr = await init_acl_manager()
         logger.info("✅ Database-backed ACL manager initialized")
     except Exception as e:
         logger.error(f"❌ Failed to initialize ACL manager: {e}")
 
     # Initialize SS Manager
     try:
-        ss_mgr = await init_ss_manager(db)
+        ss_mgr = await init_ss_manager()
         logger.info("✅ Database-backed SS manager initialized")
     except Exception as e:
         logger.error(f"❌ Failed to initialize SS manager: {e}")
@@ -190,7 +192,7 @@ async def root():
 
 
 @app.get("/api/health")
-async def health_check():
+async def health_check(db: AsyncSession = Depends(get_db)):
     """Comprehensive health check endpoint"""
     db_healthy = await test_connection()
     mqtt = get_mqtt_client()
@@ -217,8 +219,8 @@ async def health_check():
             ),
         },
         "details": {
-            "acl_info": await acl_mgr.get_acl_info() if acl_mgr else None,
-            "ss_info": await ss_mgr.get_ss_info() if ss_mgr else None,
+            "acl_info": await acl_mgr.get_acl_info(db) if acl_mgr else None,
+            "ss_info": await ss_mgr.get_ss_info(db) if ss_mgr else None,
         },
     }
 

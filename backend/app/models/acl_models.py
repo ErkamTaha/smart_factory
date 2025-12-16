@@ -277,25 +277,25 @@ async def create_default_roles(db):
 async def create_default_acl_users(db):
     """Create default ACL users"""
     default_users = [
-        {"user_id": "alice", "roles": ["admin"]},
-        {"user_id": "bob", "roles": ["operator"]},
-        {"user_id": "charlie", "roles": ["viewer", "operator"]},
-        {"user_id": "dave", "roles": ["device_owner"]},
-        {"user_id": "eve", "roles": ["device_owner"]},
-        {"user_id": "erkam", "roles": ["admin"]},
+        {"username": "alice", "roles": ["admin"]},
+        {"username": "bob", "roles": ["operator"]},
+        {"username": "charlie", "roles": ["viewer", "operator"]},
+        {"username": "dave", "roles": ["device_owner"]},
+        {"username": "eve", "roles": ["device_owner"]},
+        {"username": "erkam", "roles": ["admin"]},
     ]
 
     for user_data in default_users:
         # Check if user exists
         result = await db.execute(
-            select(ACLUser).where(ACLUser.user_id == user_data["user_id"])
+            select(ACLUser).where(ACLUser.username == user_data["username"])
         )
         existing = result.scalars().first()
         if existing:
             continue
 
         # Create user
-        user = ACLUser(user_id=user_data["user_id"], is_active=True)
+        user = ACLUser(username=user_data["username"], is_active=True)
         db.add(user)
         await db.flush()  # Get generated ID
 
@@ -307,7 +307,7 @@ async def create_default_acl_users(db):
                 user.roles.append(role)
 
     # Custom permissions — Bob
-    result = await db.execute(select(ACLUser).where(ACLUser.user_id == "bob"))
+    result = await db.execute(select(ACLUser).where(ACLUser.username == "bob"))
     bob = result.scalars().first()
     if bob and not bob.custom_permissions:
         bob.custom_permissions = [
@@ -315,7 +315,7 @@ async def create_default_acl_users(db):
         ]
 
     # Custom permissions — Eve
-    result = await db.execute(select(ACLUser).where(ACLUser.user_id == "eve"))
+    result = await db.execute(select(ACLUser).where(ACLUser.username == "eve"))
     eve = result.scalars().first()
     if eve and not eve.custom_permissions:
         eve.custom_permissions = [

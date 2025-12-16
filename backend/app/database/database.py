@@ -71,15 +71,16 @@ async def init_database() -> AsyncSession:
         try:
             from app.database.init_data import create_default_data
 
-            async with get_db as db:
+            session = SessionLocal()
+            async with session as db:
                 await create_default_data(db)
-                return db
         except Exception as e:
             logger.error(f"Error creating default data: {e}")
+            return None
 
     except Exception as e:
         logger.error(f"Error initializing database: {e}")
-        raise
+        return None
 
 
 async def test_connection():
