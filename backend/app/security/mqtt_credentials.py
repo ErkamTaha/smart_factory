@@ -40,32 +40,11 @@ class MQTTCredentialManager:
         if not user:
             raise ValueError(f"User {user_id} not found")
 
-        mqtt_username = f"mqtt_{user_id}"
-
         # Check if user already has MQTT credentials and we're not forcing regeneration
-        if user.mqtt_username and user.mqtt_hashed_password and not force_regenerate:
+        if user.mqtt_username and user.mqtt_password and not force_regenerate:
             # User has existing credentials
             logger.info(f"Using existing MQTT credentials for user {user_id}")
-
-            # Generate new password and update EMQX
-            mqtt_password = MQTTCredentialManager.generate_mqtt_password()
-
-            # Update password hash in database
-            user.mqtt_hashed_password = hash_password(mqtt_password)
-            user.mqtt_updated_at = datetime.now(timezone.utc)
-            await db.commit()
-
-            # Update in EMQX
-            emqx_auth = get_emqx_auth_manager()
-            if emqx_auth:
-                success, message = await emqx_auth.create_mqtt_user(
-                    mqtt_username, mqtt_password
-                )
-                if not success:
-                    logger.error(f"Failed to update MQTT user in EMQX: {message}")
-
-            logger.info(f"Rotated MQTT password for existing user {mqtt_username}")
-            return mqtt_username, mqtt_password
+            return user.mqtt_username, user.mqtt_password
 
         else:
             # Create new credentials
@@ -73,9 +52,11 @@ class MQTTCredentialManager:
 
             mqtt_password = MQTTCredentialManager.generate_mqtt_password()
 
+            mqtt_username = f"mqtt_{user_id}"
+
             # Store in database
             user.mqtt_username = mqtt_username
-            user.mqtt_hashed_password = hash_password(mqtt_password)
+            user.mqtt_password = mqtt_password
             user.mqtt_created_at = datetime.now(timezone.utc)
             user.mqtt_updated_at = datetime.now(timezone.utc)
             await db.commit()
@@ -124,7 +105,7 @@ class MQTTCredentialManager:
 
         # Clear from database
         user.mqtt_username = None
-        user.mqtt_hashed_password = None
+        user.mqtt_password = None
         user.mqtt_created_at = None
         user.mqtt_updated_at = None
         await db.commit()

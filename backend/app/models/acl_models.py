@@ -70,9 +70,7 @@ class ACLUser(Base):
 
     # NEW: MQTT credentials fields
     mqtt_username = Column(String(100), unique=True, nullable=True, index=True)
-    mqtt_hashed_password = Column(
-        String(256), nullable=True
-    )  # bcrypt hash of MQTT password
+    mqtt_password = Column(String(256), nullable=True)  # bcrypt hash of MQTT password
     mqtt_created_at = Column(DateTime(timezone=True), nullable=True)
     mqtt_updated_at = Column(DateTime(timezone=True), nullable=True)
 
