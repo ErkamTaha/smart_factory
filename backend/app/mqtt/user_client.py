@@ -101,27 +101,6 @@ class UserMQTTClient:
             f"Created MQTT client for user: {user_id} with QoS {qos}, TLS: {tls_enabled}"
         )
 
-    def _check_acl_permission(self, topic: str, action: str) -> bool:
-        """Check if user has permission using ACL"""
-        acl = get_acl_manager()
-        if not acl:
-            logger.warning("ACL manager not available, allowing by default")
-            return True
-
-        return acl.check_permission(self.user_id, topic, action)
-
-    def _check_ss_limit(
-        self, sensor_id: str, value: str, unit: str
-    ) -> Tuple[bool, Optional[str]]:
-        """Check SS limit config for alert"""
-        ss = get_ss_manager()
-        if not ss:
-            logger.warning("SS manager not available, can't check for alert")
-            return False, None
-
-        alert, alert_type = ss.check_limit_for_alert(sensor_id, value, unit)
-        return alert, alert_type
-
     async def _broadcast_system_alert(
         self, level: str, message: str, details: Optional[Dict[str, Any]] = None
     ):
@@ -130,14 +109,6 @@ class UserMQTTClient:
         if not ws:
             logger.warning("Websocket manager not avaliable, can't broadcast alert.")
         await ws.broadcast_system_alert(level, message, details)
-
-    def _get_sensor_info(self, sensor_id) -> Optional[Dict]:
-        # Get sensor info
-        ss = get_ss_manager()
-        if not ss:
-            logger.warning("SS manager not available, can't check for alert")
-            return None
-        return ss.get_sensor_info(sensor_id)
 
     def _on_connect(self, client, userdata, flags, rc):
         """Called when MQTT connection is established"""

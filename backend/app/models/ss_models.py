@@ -433,3 +433,45 @@ async def create_default_sensors(db):
                 db.add(limit)
 
     await db.commit()
+
+
+async def create_default_ss_config(db):
+    """Create default SS (Sensor Security) configuration"""
+    default_configs = [
+        {
+            "key": "alert_retention_days",
+            "value": "30",
+            "description": "Number of days to retain resolved alerts",
+        },
+        {
+            "key": "auto_resolve_alerts",
+            "value": "false",
+            "description": "Automatically resolve alerts when sensor values return to normal",
+        },
+        {
+            "key": "enable_notifications",
+            "value": "true",
+            "description": "Enable WebSocket notifications for sensor alerts",
+        },
+        {
+            "key": "alert_cooldown_seconds",
+            "value": "60",
+            "description": "Minimum time between consecutive alerts for the same sensor",
+        },
+        {
+            "key": "version",
+            "value": "1.0",
+            "description": "SS configuration version",
+        },
+    ]
+
+    for config_data in default_configs:
+        result = await db.execute(
+            select(SSConfig).where(SSConfig.key == config_data["key"])
+        )
+        existing = result.scalars().first()
+
+        if not existing:
+            db.add(SSConfig(**config_data))
+
+    await db.commit()

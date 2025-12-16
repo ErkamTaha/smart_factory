@@ -37,6 +37,7 @@ async def create_default_data(db: AsyncSession):
         await create_default_sensor_types(db)
         await create_default_sensors(db)
         await create_default_ss_config(db)
+        await db.commit()
 
         logger.info("Default data created successfully!")
 
