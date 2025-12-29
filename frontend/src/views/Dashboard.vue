@@ -453,10 +453,10 @@ import {
 } from 'ionicons/icons';
 
 import webSocketService from '@/services/websocket';
-import { useIotStore } from '@/stores/iot';
+import { useFactoryStore } from '@/stores/factory';
 
 // Store and router
-const iotStore = useIotStore();
+const factoryStore = useFactoryStore();
 const router = useRouter();
 
 // Reactive State

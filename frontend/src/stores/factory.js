@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import apiService from '../services/api'
 
-export const useIotStore = defineStore('iot', () => {
+export const useFactoryStore = defineStore('factory', () => {
   // State
   const devices = ref([])
   const latestSensorData = ref([])

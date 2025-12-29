@@ -10,6 +10,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 import logging
 
+from fastapi.security import OAuth2PasswordBearer
+
 from app.models.mqtt_models import (
     MQTTDevice,
     MQTTSensorReading,
@@ -52,6 +54,7 @@ from app.mqtt.client import get_mqtt_client
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/mqtt", tags=["MQTT"])
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 
 # ============= DEVICE ENDPOINTS =============
@@ -630,4 +633,46 @@ async def get_mqtt_statistics(db: AsyncSession = Depends(get_db)):
         logger.error(f"Error getting MQTT statistics: {e}")
         raise HTTPException(
             status_code=500, detail=f"Failed to get MQTT statistics: {str(e)}"
+        )
+
+
+# ============= CREDENTIALS ENDPOINT =============
+
+
+@router.get("/credentials")
+async def get_mqtt_credentials(
+    token: str = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get MQTT credentials for the current authenticated user"""
+
+    from app.routes.auth_router import get_current_user
+    from app.security.mqtt_credentials import MQTTCredentialManager
+    from app.config import settings
+
+    # Get current user
+    current_user = await get_current_user(token, db)
+    try:
+        mqtt_username, mqtt_password = (
+            await MQTTCredentialManager.get_or_create_mqtt_credentials(
+                current_user.username, db
+            )
+        )
+        return {
+            "mqtt_username": mqtt_username,
+            "mqtt_password": mqtt_password,
+            "mqtt_broker_host": settings.MQTT_BROKER_HOST,
+            "mqtt_broker_port": settings.MQTT_BROKER_PORT,
+            "mqtt_tls_enabled": settings.MQTT_TLS_ENABLED,
+            "mqtt_ws_port": 8083,  # WebSocket port if needed
+        }
+
+    except ValueError as e:
+        logger.error(f"Error getting MQTT credentials: {e}")
+        raise HTTPException(status_code=404, detail=str(e))
+
+    except Exception as e:
+        logger.error(f"Error getting MQTT credentials: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to get MQTT credentials: {str(e)}"
         )
