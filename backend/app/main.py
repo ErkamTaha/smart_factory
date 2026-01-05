@@ -20,9 +20,10 @@ from app.mqtt.user_client import init_user_mqtt_manager, get_user_mqtt_manager
 from app.websocket.manager import get_websocket_manager
 from app.managers.db_acl_manager import init_acl_manager, get_acl_manager
 from app.managers.db_ss_manager import init_ss_manager, get_ss_manager
+from app.managers.db_auth_manager import init_auth_manager, get_auth_manager
 from app.routes import websocket_router
 from app.config import settings
-from app.routes import acl_router, mqtt_router, ss_router
+from app.routes import acl_router, mqtt_router, ss_router, auth_router
 
 # Configure logging
 logging.basicConfig(
@@ -50,6 +51,13 @@ async def lifespan(app: FastAPI):
 
     # Get main event loop
     main_loop = asyncio.get_running_loop()
+
+    # Initialize Auth Manager
+    try:
+        auth_mgr = init_auth_manager()
+        logger.info("✅ Authentication manager initialized")
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize Auth manager: {e}")
 
     # Initialize ACL Manager
     try:
@@ -154,6 +162,7 @@ app.add_middleware(
 )
 
 # Include routers
+app.include_router(auth_router.router)
 app.include_router(mqtt_router.router)
 app.include_router(websocket_router.router, prefix="/ws")
 app.include_router(acl_router.router)

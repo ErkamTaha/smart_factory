@@ -126,45 +126,6 @@ async def login(
         raise HTTPException(status_code=500, detail="Login failed. Please try again.")
 
 
-@router.get("/me", response_model=UserOut)
-async def get_current_user_info(
-    current_user: ACLUser = Depends(lambda: get_current_user),
-):
-    """Get current authenticated user information"""
-    return current_user
-
-
-@router.get("/me/permissions")
-async def get_current_user_permissions(
-    current_user: ACLUser = Depends(lambda: get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """Get current user's permissions"""
-    auth = get_auth_manager()
-    if not auth:
-        raise HTTPException(
-            status_code=503, detail="Authentication manager not available"
-        )
-
-    try:
-        user_info = await auth.get_user_with_permissions(current_user.username, db)
-
-        if not user_info:
-            raise HTTPException(status_code=404, detail="User not found")
-
-        return user_info
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(
-            f"Error in get_current_user_permissions:\n{traceback.format_exc()}"
-        )
-        raise HTTPException(
-            status_code=500, detail="Failed to retrieve user permissions"
-        )
-
-
 # Dependency to get current authenticated user
 async def get_current_user(
     token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)
@@ -220,6 +181,76 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",
             headers={"WWW-Authenticate": "Bearer"},
+        )
+
+
+async def get_user_by_username(
+    username: str, db: AsyncSession = Depends(get_db)
+) -> ACLUser:
+    auth = get_auth_manager()
+    if not auth:
+        raise HTTPException(
+            status_code=503,
+            detail="Authentication manager not available",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    try:
+        # Get user from database
+        user = await auth.get_user_by_username(username, db)
+
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User not found",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        return user
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in get_user_by_username:\n{traceback.format_exc()}")
+        raise HTTPException(
+            status_code=500,
+            detail="Could not retrieve user",
+        )
+
+
+@router.get("/me", response_model=UserOut)
+async def get_current_user_info(
+    current_user: ACLUser = Depends(get_current_user),
+):
+    """Get current authenticated user information"""
+    return current_user
+
+
+@router.get("/me/permissions")
+async def get_current_user_permissions(
+    current_user: ACLUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get current user's permissions"""
+    auth = get_auth_manager()
+    if not auth:
+        raise HTTPException(
+            status_code=503, detail="Authentication manager not available"
+        )
+
+    try:
+        user_info = await auth.get_user_with_permissions(current_user.username, db)
+
+        if not user_info:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        return user_info
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(
+            f"Error in get_current_user_permissions:\n{traceback.format_exc()}"
+        )
+        raise HTTPException(
+            status_code=500, detail="Failed to retrieve user permissions"
         )
 
 

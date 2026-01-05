@@ -5,7 +5,7 @@ from typing import Tuple, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timezone
 
-from app.routes.acl_router import get_user
+from app.routes.auth_router import get_user_by_username
 from app.security.auth_security import hash_password, verify_password
 from app.mqtt.emqx_auth import get_emqx_auth_manager
 
@@ -35,7 +35,7 @@ class MQTTCredentialManager:
         Returns:
             (mqtt_username, mqtt_password) tuple
         """
-        user = await get_user(user_id, db)
+        user = await get_user_by_username(user_id, db)
 
         if not user:
             raise ValueError(f"User {user_id} not found")
@@ -88,7 +88,7 @@ class MQTTCredentialManager:
         Returns:
             True if successful, False otherwise
         """
-        user = await get_user(user_id, db)
+        user = await get_user_by_username(user_id, db)
 
         if not user or not user.mqtt_username:
             logger.warning(f"No MQTT credentials found for user {user_id}")

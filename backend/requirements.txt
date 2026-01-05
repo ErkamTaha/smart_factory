@@ -11,6 +11,7 @@ alembic==1.12.1
 # Pydantic (updated for compatibility)
 pydantic==2.5.0
 pydantic-settings==2.1.0
+email-validator==2.1.0
 
 # MQTT and messaging
 paho-mqtt==1.6.1
