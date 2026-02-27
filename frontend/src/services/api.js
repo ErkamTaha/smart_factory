@@ -11,9 +11,13 @@ const api = axios.create({
   }
 })
 
-// Request interceptor
+// Request interceptor - attach JWT token if available
 api.interceptors.request.use(
   (config) => {
+    const token = localStorage.getItem('access_token')
+    if (token) {
+      config.headers['Authorization'] = `Bearer ${token}`
+    }
     console.log(`API Request: ${config.method?.toUpperCase()} ${config.url}`)
     return config
   },
@@ -23,7 +27,7 @@ api.interceptors.request.use(
   }
 )
 
-// Response interceptor
+// Response interceptor - handle 401 by redirecting to login
 api.interceptors.response.use(
   (response) => {
     console.log(`API Response: ${response.status} ${response.config.url}`)
@@ -31,12 +35,28 @@ api.interceptors.response.use(
   },
   (error) => {
     console.error('API Response Error:', error.response?.data || error.message)
+    if (error.response?.status === 401) {
+      localStorage.removeItem('access_token')
+      localStorage.removeItem('user')
+      localStorage.removeItem('mqtt_credentials')
+      window.location.href = '/login'
+    }
     return Promise.reject(error)
   }
 )
 
 // API methods
 const apiService = {
+  // Auth endpoints
+  login: (username, password) => api.post('/api/auth/login',
+    new URLSearchParams({ username, password }),
+    { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+  ),
+  register: (username, email, password) => api.post('/api/auth/register', { username, email, password }),
+  getCurrentUser: () => api.get('/api/auth/me'),
+  refreshToken: () => api.post('/api/auth/refresh'),
+  getMqttCredentials: () => api.get('/api/mqtt/credentials'),
+
   // Health and status
   getHealth: () => api.get('/api/health'),
   getDatabaseStatus: () => api.get('/api/database/status'),

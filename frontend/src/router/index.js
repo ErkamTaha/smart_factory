@@ -6,12 +6,32 @@ const routes = [
     redirect: '/dashboard'
   },
   {
+    path: '/login',
+    name: 'Login',
+    component: () => import('@/views/Login.vue'),
+    meta: {
+      title: 'Sign In',
+      requiresAuth: false,
+      guestOnly: true
+    }
+  },
+  {
+    path: '/register',
+    name: 'Register',
+    component: () => import('@/views/Register.vue'),
+    meta: {
+      title: 'Create Account',
+      requiresAuth: false,
+      guestOnly: true
+    }
+  },
+  {
     path: '/dashboard',
     name: 'Dashboard',
     component: () => import('@/views/Dashboard.vue'),
     meta: {
       title: 'Smart Factory Dashboard',
-      requiresAuth: false
+      requiresAuth: true
     }
   },
   {
@@ -20,7 +40,7 @@ const routes = [
     component: () => import('@/views/MqttTestClient.vue'),
     meta: {
       title: 'MQTT Test & Management',
-      requiresAuth: false
+      requiresAuth: true
     }
   },
   {
@@ -29,7 +49,7 @@ const routes = [
     component: () => import('@/views/ACLManagement.vue'),
     meta: {
       title: 'ACL Management',
-      requiresAuth: false
+      requiresAuth: true
     }
   },
   {
@@ -38,7 +58,7 @@ const routes = [
     component: () => import('@/views/SSManagement.vue'),
     meta: {
       title: 'Sensor Security Management',
-      requiresAuth: false
+      requiresAuth: true
     }
   },
   {
@@ -47,7 +67,7 @@ const routes = [
     component: () => import('@/views/SensorDetails.vue'),
     meta: {
       title: 'Sensor Details',
-      requiresAuth: false
+      requiresAuth: true
     }
   },
   {
@@ -56,7 +76,7 @@ const routes = [
     component: () => import('@/views/DeviceDetails.vue'),
     meta: {
       title: 'Device Details',
-      requiresAuth: false
+      requiresAuth: true
     }
   },
   {
@@ -65,7 +85,7 @@ const routes = [
     component: () => import('@/views/AllReadings.vue'),
     meta: {
       title: 'All Sensor Readings',
-      requiresAuth: false
+      requiresAuth: true
     }
   },
   // Redirect any unmatched routes to dashboard
@@ -80,26 +100,28 @@ const router = createRouter({
   routes
 });
 
-// Navigation guards
 router.beforeEach((to, from, next) => {
-  // Set page title
   if (to.meta.title) {
     document.title = `${to.meta.title} - Smart Factory`;
   } else {
     document.title = 'Smart Factory';
   }
 
-  // Authentication check (if needed in the future)
-  if (to.meta.requiresAuth) {
-    // Add authentication logic here
-    const isAuthenticated = true; // Replace with actual auth check
-    if (!isAuthenticated) {
-      next('/login');
-      return;
-    }
+  const isAuthenticated = !!localStorage.getItem('access_token')
+
+  // Redirect authenticated users away from login/register
+  if (to.meta.guestOnly && isAuthenticated) {
+    next('/dashboard')
+    return
   }
 
-  next();
+  // Redirect unauthenticated users to login
+  if (to.meta.requiresAuth && !isAuthenticated) {
+    next('/login')
+    return
+  }
+
+  next()
 });
 
 export default router;

@@ -23,12 +23,13 @@ class WebSocketService {
             this.isManuallyDisconnected = false;
             this.currentUserId = userId;
             this.currentUrl = url;
+            this.currentToken = token;
 
-            // Add user_id and token to URL
-            const urlWithId = `${url}?user_id=${userId}&token=${token}`;
+            // Pass user_id as query param, token as subprotocol (required by backend)
+            const urlWithId = `${url}?user_id=${userId}`;
 
             try {
-                this.ws = new WebSocket(urlWithId);
+                this.ws = new WebSocket(urlWithId, ['smartfactory', token]);
 
                 this.ws.onopen = (event) => {
                     console.log('WebSocket connected successfully as user:', userId);
@@ -110,7 +111,7 @@ class WebSocketService {
 
         setTimeout(() => {
             if (!this.isManuallyDisconnected && this.currentUrl && this.currentUserId) {
-                this.connect(this.currentUrl, this.currentUserId);
+                this.connect(this.currentUrl, this.currentUserId, this.currentToken);
             }
         }, delay);
     }

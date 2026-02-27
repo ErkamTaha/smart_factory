@@ -10,6 +10,9 @@
                     <ion-button @click="showSettings = true">
                         <ion-icon :icon="settingsOutline" slot="icon-only"></ion-icon>
                     </ion-button>
+                    <ion-button @click="handleLogout">
+                        <ion-icon :icon="logOutOutline" slot="icon-only"></ion-icon>
+                    </ion-button>
                     <!-- Connection Status -->
                     <ion-chip :color="connectionStatusColor" class="connection-status" @click="toggleConnection">
                         <ion-icon :icon="connectionStatusIcon"></ion-icon>
@@ -449,15 +452,24 @@ import {
     layersOutline, lockClosedOutline, flashOutline, addCircleOutline, sendOutline,
     terminalOutline, closeOutline, saveOutline, addOutline, warningOutline,
     alertCircleOutline, checkmarkCircle, closeCircle, wifi,
-    globeOutline
+    globeOutline, logOutOutline
 } from 'ionicons/icons';
 
 import webSocketService from '@/services/websocket';
 import { useFactoryStore } from '@/stores/factory';
+import { useAuthStore } from '@/stores/auth';
 
 // Store and router
 const factoryStore = useFactoryStore();
+const authStore = useAuthStore();
 const router = useRouter();
+
+// Logout
+const handleLogout = () => {
+    webSocketService.disconnect();
+    authStore.logout();
+    router.replace('/login');
+};
 
 // Reactive State
 const isLoading = ref(false);
@@ -496,8 +508,8 @@ const commandData = ref({
 });
 
 const settings = ref({
-    userId: 'erkam',
-    wsUrl: 'ws://localhost:8000/ws/ws',
+    userId: authStore.username || authStore.user?.username || '',
+    wsUrl: `ws://${window.location.host}/ws/ws`,
     autoRefresh: true,
     refreshInterval: 15
 });
@@ -753,7 +765,9 @@ const connectWebSocket = async () => {
     isLoading.value = true;
 
     try {
-        await webSocketService.connect(settings.value.wsUrl, settings.value.userId, authStore.token);
+        const token = authStore.token || localStorage.getItem('access_token');
+        const userId = authStore.username || authStore.user?.username || settings.value.userId;
+        await webSocketService.connect(settings.value.wsUrl, userId, token);
 
         // Subscribe to all necessary topics for real-time updates
         webSocketService.subscribeMQTT([
@@ -984,6 +998,8 @@ const loadSettings = () => {
             console.error('Failed to load settings:', err);
         }
     }
+    // Always use the logged-in user's username
+    settings.value.userId = authStore.username || authStore.user?.username || '';
 };
 
 const startAutoRefresh = () => {
