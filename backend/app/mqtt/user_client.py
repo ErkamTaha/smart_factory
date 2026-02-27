@@ -485,7 +485,12 @@ class UserMQTTClientManager:
         logger.info("Main event loop set for UserMQTTClientManager")
 
     def create_user_client(
-        self, user_id: str, websocket: WebSocket, qos: Optional[int] = None
+        self,
+        user_id: str,
+        websocket: WebSocket,
+        qos: Optional[int] = None,
+        mqtt_username: Optional[str] = None,
+        mqtt_password: Optional[str] = None,
     ) -> UserMQTTClient:
         """
         Create and connect MQTT client for a user

@@ -14,7 +14,7 @@ from app.mqtt.user_client import get_user_mqtt_manager
 from app.mqtt.emqx_auth import get_emqx_auth_manager
 from app.websocket.manager import get_websocket_manager
 from app.security.auth_security import decode_access_token
-from app.routes.acl_router import get_user
+from app.managers.db_auth_manager import get_auth_manager
 from app.database import get_db
 
 logger = logging.getLogger(__name__)
@@ -52,7 +52,8 @@ async def websocket_endpoint(websocket: WebSocket, db: AsyncSession = Depends(ge
     # user_id is actually username
     user_id = payload["sub"]
 
-    user = await get_user(user_id, db)
+    auth = get_auth_manager()
+    user = await auth.get_user_by_username(user_id, db)
 
     if user is None:
         await websocket.close(code=1008, reason="User does not exist")
