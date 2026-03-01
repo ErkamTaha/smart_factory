@@ -1,13 +1,13 @@
 <template>
     <ion-page>
-        <ion-header>
+        <ion-header :translucent="true">
             <ion-toolbar color="primary">
                 <ion-buttons slot="start">
-                    <ion-back-button default-href="/"></ion-back-button>
+                    <ion-back-button color="light" default-href="/dashboard"></ion-back-button>
                 </ion-buttons>
-                <ion-title>Sensor Security Management</ion-title>
+                <ion-title>Sensor Security</ion-title>
                 <ion-buttons slot="end">
-                    <ion-button @click="refreshData" :disabled="isLoading">
+                    <ion-button color="light" title="Refresh" @click="refreshData" :disabled="isLoading">
                         <ion-icon :icon="refreshOutline" slot="icon-only"></ion-icon>
                     </ion-button>
                 </ion-buttons>
@@ -153,7 +153,7 @@
                                 Add Limit Configuration
                             </ion-button>
                         </div>
-                        <div v-if="addError" class="error-message">
+                        <div v-if="addError" class="inline-error">
                             {{ addError }}
                         </div>
                         <ion-button expand="block" @click="createSensor" :disabled="!isValidNewSensor"
@@ -472,7 +472,7 @@
                             </ion-button>
                         </div>
                     </div>
-                    <div v-if="updateError" class="error-message">
+                    <div v-if="updateError" class="inline-error">
                         {{ updateError }}
                     </div>
 
@@ -533,8 +533,7 @@
                                     <p>Lower: {{ limit.lower_limit }} {{ limit.unit }}</p>
                                     <p>Created: {{ formatDateTime(limit.created_at) }}</p>
                                     <p>Updated: {{ formatDateTime(limit.updated_at) }}</p>
-                                    <div style="height:1px; background-color: #b0b0b0; margin: 8px 0;">
-                                    </div>
+                                    <div class="card-divider"></div>
 
                                 </div>
                             </ion-card-content>
@@ -578,8 +577,7 @@
                                         Revert
                                     </ion-button>
 
-                                    <div style="height:1px; background-color: #b0b0b0; margin: 8px 0;">
-                                    </div>
+                                    <div class="card-divider"></div>
 
                                 </div>
                             </ion-card-content>
@@ -1161,148 +1159,77 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* stat-item, inline-error, card-divider, action-row are in global.css */
+
 .alert-actions {
-    display: flex;
-    justify-content: flex-end;
-    /* aligns content to the right */
-    margin-top: 1rem;
-    /* space above the button */
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
 }
 
-/* Alert message bold and spaced */
 .alert-item h2 {
-    font-size: 1rem;
-    margin: 0 0 0.25rem 0;
-    line-height: 1.3;
+  font-size: 14px;
+  margin: 0 0 4px;
+  line-height: 1.3;
 }
 
-/* Info paragraphs */
 .alert-item p {
-    margin: 0.15rem 0;
-    font-size: 0.85rem;
-    color: #555;
+  margin: 2px 0;
+  font-size: 13px;
+  color: var(--ion-color-medium);
 }
 
 .limit-name {
-    margin-right: 6px;
-    /* or any size */
-}
-
-.error-message {
-    color: red;
-    margin-top: 8px;
-    font-weight: bold;
-}
-
-.stat-item {
-    text-align: center;
-    padding: 16px;
-}
-
-.stat-item h2 {
-    margin: 0;
-    font-size: 2rem;
-    font-weight: bold;
-    color: var(--ion-color-primary);
-}
-
-.stat-item p {
-    margin: 8px 0 0 0;
-    font-size: 0.8rem;
-    color: var(--ion-color-medium);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-.ss-actions {
-    display: flex;
-    gap: 8px;
-    margin-top: 16px;
+  margin-right: 4px;
 }
 
 .limits-section {
-    margin-top: 20px;
-    padding: 16px;
-    background: var(--ion-color-light);
-    border-radius: 8px;
+  margin-top: 16px;
+  padding: 14px 16px;
+  background: var(--ion-color-light);
+  border-radius: 10px;
 }
 
 .limits-section h4 {
-    margin: 0 0 16px 0;
-    font-size: 1.1rem;
-    color: var(--ion-color-dark);
-}
-
-.sensor-item {
-    margin-bottom: 8px;
-}
-
-.sensor-limits {
-    margin-top: 4px;
-    padding: 4px 8px;
-    background: var(--ion-color-light);
-    border-radius: 4px;
-}
-
-.alert-result .result-header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 12px;
-}
-
-.alert-result h3 {
-    margin: 0;
-    font-size: 1.2rem;
-}
-
-.alert-details {
-    background: rgba(255, 255, 255, 0.3);
-    padding: 8px;
-    border-radius: 4px;
-    font-family: monospace;
-    font-size: 0.7em;
-    margin-top: 8px;
-    max-height: 100px;
-    overflow-y: auto;
-}
-
-.config-info {
-    background: var(--ion-color-light);
-    padding: 16px;
-    border-radius: 8px;
-    margin-bottom: 16px;
-}
-
-.config-info p {
-    margin: 8px 0;
-    font-family: monospace;
-    font-size: 0.9rem;
-}
-
-.config-actions {
-    display: flex;
-    gap: 8px;
+  margin: 0 0 12px;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--ion-color-medium);
 }
 
 .limit-edit {
-    margin-bottom: 12px;
-    padding: 12px;
-    background: var(--ion-color-light);
-    border-radius: 8px;
+  margin-bottom: 10px;
+  padding: 12px;
+  background: white;
+  border-radius: 8px;
 }
 
-@media (max-width: 768px) {
-    .ss-actions {
-        flex-direction: column;
-    }
+.alert-result .result-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
 
-    .config-actions {
-        flex-direction: column;
-    }
+.alert-result h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+}
 
-    .stat-item h2 {
-        font-size: 1.5rem;
-    }
+.config-info {
+  background: var(--ion-color-light);
+  padding: 14px 16px;
+  border-radius: 10px;
+  margin-bottom: 16px;
+}
+
+.config-info p {
+  margin: 6px 0;
+  font-family: monospace;
+  font-size: 13px;
 }
 </style>

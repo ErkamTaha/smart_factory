@@ -59,17 +59,20 @@ const apiService = {
 
   // Health and status
   getHealth: () => api.get('/api/health'),
-  getDatabaseStatus: () => api.get('/api/database/status'),
+  getDatabaseStatus: () => api.get('/api/health'),
 
-  // IoT endpoints
-  getDevices: () => api.get('/api/iot/devices'),
-  getDeviceData: (deviceId, limit = 10) => api.get(`/api/iot/data/${deviceId}?limit=${limit}`),
-  publishSensorData: (data) => api.post('/api/iot/data', data),
-  sendCommand: (command) => api.post('/api/iot/command', command),
-  getLatestData: (limit = 20) => api.get(`/api/iot/latest?limit=${limit}`),
-  getSensorTypeData: (type, hours) => api.get(`/api/iot/sensors/${sensor_type}`, type, hours),
-  getRecentCommands: (limit = 20) => api.get(`api/iot/commands?limit=${limit}`),
-  getIotStats: () => api.get(`api/iot/stats`),
+  // MQTT / Device endpoints
+  getDevices: (activeOnly = true) => api.get(`/api/mqtt/devices?active_only=${activeOnly}`),
+  getDeviceData: (deviceId, limit = 10) => api.get(`/api/mqtt/devices/${deviceId}/readings?limit=${limit}`),
+  publishSensorData: (data) => api.post('/api/mqtt/readings', data),
+  sendCommand: (command) => api.post('/api/mqtt/commands', command),
+  getLatestData: (limit = 20) => api.get(`/api/mqtt/readings?limit=${limit}`),
+  getLatestReadings: (limit = 20) => api.get(`/api/mqtt/readings?limit=${limit}`),
+  getSensorTypeData: (sensorType, limit = 20) => api.get(`/api/mqtt/readings?limit=${limit}`),
+  getRecentCommands: (limit = 20) => api.get(`/api/mqtt/commands?limit=${limit}`),
+  getMqttDevices: (activeOnly = true) => api.get(`/api/mqtt/devices?active_only=${activeOnly}`),
+  getMqttStats: () => api.get('/api/mqtt/stats'),
+  getIotStats: () => api.get('/api/mqtt/stats'),
 
   // ACL endpoints
   getACLInfo: () => api.get('/api/acl/info'),
@@ -82,7 +85,7 @@ const apiService = {
   checkPermission: (check) => api.post('/api/acl/check', check),
   addUserPermission: (userId, permission) => api.post(`/api/acl/users/${userId}/permissions`, permission),
   reloadACL: () => api.post('/api/acl/reload'),
-  getActiveSessions: () => api.get('/api/acl/sessions'),
+  getActiveSessions: () => api.get('/api/mqtt/sessions'),
 
   // SS endpoints
   getSSInfo: () => api.get('/api/ss/info'),
@@ -101,8 +104,8 @@ const apiService = {
   resolveAlert: (alertId) => api.post(`/api/ss/alerts/${alertId}/resolve`),
   revertAlert: (alertId) => api.post(`/api/ss/alerts/${alertId}/revert`),
 
-  // User management
-  getActiveUsers: () => api.get('/api/users'),
+  // User management (active sessions)
+  getActiveUsers: () => api.get('/api/mqtt/sessions'),
 }
 
 export default apiService

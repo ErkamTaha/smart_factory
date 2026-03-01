@@ -43,9 +43,9 @@ async def websocket_endpoint(websocket: WebSocket, db: AsyncSession = Depends(ge
         await websocket.close(code=1008, reason="Missing token")
         return
 
-    payload = decode_access_token(token)
-
-    if payload is None:
+    try:
+        payload = decode_access_token(token)
+    except ValueError:
         await websocket.close(code=1008, reason="Invalid or expired token")
         return
 
@@ -123,12 +123,20 @@ async def websocket_endpoint(websocket: WebSocket, db: AsyncSession = Depends(ge
 
             try:
                 message = json.loads(data)
-                await handle_user_message(user_id, message, user_mqtt_client, websocket)
+                await handle_user_message(user_id, message, user_mqtt_client, websocket, db)
             except json.JSONDecodeError:
                 logger.warning(f"User {user_id} sent invalid JSON: {data}")
                 await websocket.send_text(
                     json.dumps({"type": "error", "message": "Invalid JSON format"})
                 )
+            except Exception as e:
+                logger.error(f"Error handling message from user {user_id}: {e}", exc_info=True)
+                try:
+                    await websocket.send_text(
+                        json.dumps({"type": "error", "message": f"Server error: {str(e)}"})
+                    )
+                except Exception:
+                    pass
 
     except WebSocketDisconnect:
         logger.info(f"User {user_id} disconnected from WebSocket")
@@ -148,7 +156,7 @@ async def websocket_endpoint(websocket: WebSocket, db: AsyncSession = Depends(ge
 
 
 async def handle_user_message(
-    user_id: str, message: dict, mqtt_client, websocket: WebSocket
+    user_id: str, message: dict, mqtt_client, websocket: WebSocket, db: AsyncSession
 ):
     """Handle messages from user's WebSocket"""
     message_type = message.get("type")
@@ -269,8 +277,8 @@ async def handle_user_message(
 
         system_info = {
             "type": "system_info",
-            "acl_info": await acl_mgr.get_acl_info() if acl_mgr else None,
-            "ss_info": await ss_mgr.get_ss_info() if ss_mgr else None,
+            "acl_info": await acl_mgr.get_acl_info(db) if acl_mgr else None,
+            "ss_info": await ss_mgr.get_ss_info(db) if ss_mgr else None,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
@@ -282,7 +290,7 @@ async def handle_user_message(
 
         acl_mgr = get_acl_manager()
         if acl_mgr:
-            await acl_mgr.reload()
+            await acl_mgr.reload(db)
             await websocket.send_text(
                 json.dumps(
                     {
@@ -305,7 +313,7 @@ async def handle_user_message(
 
         ss_mgr = get_ss_manager()
         if ss_mgr:
-            await ss_mgr.reload()
+            await ss_mgr.reload(db)
             await websocket.send_text(
                 json.dumps(
                     {

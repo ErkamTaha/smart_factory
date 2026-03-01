@@ -4,13 +4,13 @@
             <ion-toolbar color="primary">
                 <ion-title>Smart Factory Dashboard</ion-title>
                 <ion-buttons slot="end">
-                    <ion-button @click="refreshData" :disabled="isLoading">
+                    <ion-button color="light" title="Refresh data" @click="refreshData" :disabled="isRefreshing || !isConnected">
                         <ion-icon :icon="refreshOutline" slot="icon-only"></ion-icon>
                     </ion-button>
-                    <ion-button @click="showSettings = true">
+                    <ion-button color="light" title="Settings" @click="showSettings = true">
                         <ion-icon :icon="settingsOutline" slot="icon-only"></ion-icon>
                     </ion-button>
-                    <ion-button @click="handleLogout">
+                    <ion-button color="light" title="Logout" @click="handleLogout">
                         <ion-icon :icon="logOutOutline" slot="icon-only"></ion-icon>
                     </ion-button>
                     <!-- Connection Status -->
@@ -45,7 +45,7 @@
             </div>
 
             <!-- Loading State -->
-            <div v-if="isLoading && !hasData" class="loading-container">
+            <div v-if="isLoading && !hasData" class="page-loading">
                 <ion-spinner name="crescent" color="primary"></ion-spinner>
                 <p>Loading dashboard data...</p>
             </div>
@@ -159,9 +159,7 @@
                     <ion-card-content>
                         <ion-list v-if="activeUsers.length > 0">
                             <ion-item v-for="user in activeUsers" :key="user.user_id">
-                                <ion-avatar slot="start">
-                                    <div class="user-avatar">{{ user.user_id.charAt(0).toUpperCase() }}</div>
-                                </ion-avatar>
+                                <div slot="start" class="item-avatar">{{ user.user_id.charAt(0).toUpperCase() }}</div>
                                 <ion-label>
                                     <h3>{{ user.user_id }}</h3>
                                     <p>{{ user.subscribed_topics.length }} subscriptions | QoS {{ user.qos }}</p>
@@ -414,24 +412,22 @@
                 </ion-content>
             </ion-modal>
 
-            <!-- Floating Action Button -->
-            <ion-fab vertical="bottom" horizontal="end" slot="fixed">
-                <ion-fab-button color="primary">
-                    <ion-icon :icon="addOutline"></ion-icon>
-                </ion-fab-button>
-                <ion-fab-list side="top">
-                    <ion-fab-button @click="showPublishModal = true">
-                        <ion-icon :icon="addCircleOutline"></ion-icon>
-                    </ion-fab-button>
-                    <ion-fab-button @click="showCommandModal = true">
-                        <ion-icon :icon="sendOutline"></ion-icon>
-                    </ion-fab-button>
-                    <ion-fab-button @click="refreshData">
-                        <ion-icon :icon="refreshOutline"></ion-icon>
-                    </ion-fab-button>
-                </ion-fab-list>
-            </ion-fab>
         </ion-content>
+
+        <!-- Custom Toast Notifications -->
+        <div class="toast-container">
+            <transition-group name="toast" tag="div" class="toast-stack">
+                <div v-for="toast in toasts" :key="toast.id"
+                    class="custom-toast" :class="`toast-${toast.color}`">
+                    <ion-icon :icon="toast.icon" class="toast-icon"></ion-icon>
+                    <span class="toast-message">{{ toast.message }}</span>
+                    <ion-button fill="clear" size="small" class="toast-close"
+                        @click="removeToast(toast.id)">
+                        <ion-icon :icon="closeOutline" slot="icon-only"></ion-icon>
+                    </ion-button>
+                </div>
+            </transition-group>
+        </div>
     </ion-page>
 </template>
 
@@ -443,19 +439,20 @@ import {
     IonIcon, IonCard, IonCardContent, IonCardHeader, IonCardTitle, IonList,
     IonItem, IonLabel, IonChip, IonSpinner, IonAvatar, IonModal, IonGrid, IonRow, IonCol,
     IonInput, IonTextarea, IonSelect, IonSelectOption, IonToggle, IonRange,
-    IonFab, IonFabButton, IonFabList, alertController, toastController
+    alertController
 } from '@ionic/vue';
 import {
     refreshOutline, settingsOutline, checkmarkCircleOutline, closeCircleOutline,
     hardwareChipOutline, peopleOutline, barChartOutline, shieldCheckmarkOutline,
     thermometerOutline, wifiOutline, informationCircleOutline, cloudOfflineOutline,
     layersOutline, lockClosedOutline, flashOutline, addCircleOutline, sendOutline,
-    terminalOutline, closeOutline, saveOutline, addOutline, warningOutline,
+    terminalOutline, closeOutline, saveOutline, warningOutline,
     alertCircleOutline, checkmarkCircle, closeCircle, wifi,
     globeOutline, logOutOutline
 } from 'ionicons/icons';
 
 import webSocketService from '@/services/websocket';
+import apiService from '@/services/api';
 import { useFactoryStore } from '@/stores/factory';
 import { useAuthStore } from '@/stores/auth';
 
@@ -473,6 +470,7 @@ const handleLogout = () => {
 
 // Reactive State
 const isLoading = ref(false);
+const isRefreshing = ref(false);
 const hasData = ref(false);
 const error = ref(null);
 
@@ -558,15 +556,23 @@ watch(() => settings.value.autoRefresh, (enabled) => {
     }
 });
 
-// Methods
-const showToast = async (message, color = 'primary') => {
-    const toast = await toastController.create({
-        message,
-        duration: 3000,
-        color,
-        position: 'bottom'
-    });
-    await toast.present();
+// Custom toast system
+const toasts = ref([]);
+
+const removeToast = (id) => {
+    toasts.value = toasts.value.filter(t => t.id !== id);
+};
+
+const showToast = (message, color = 'primary') => {
+    const iconMap = {
+        success: checkmarkCircleOutline,
+        danger: alertCircleOutline,
+        warning: warningOutline,
+        primary: informationCircleOutline,
+    };
+    const id = Date.now() + Math.random();
+    toasts.value.push({ id, message, color, icon: iconMap[color] || informationCircleOutline });
+    setTimeout(() => removeToast(id), 3500);
 };
 
 const showAlert = async (header, message) => {
@@ -584,6 +590,13 @@ const handleConnectionStatus = (data) => {
         isConnected.value = true;
         connectionStatus.value = 'Connected';
         showToast('Connected to system', 'success');
+        // Request initial data now that we know the backend is ready
+        requestSystemStatus();
+        requestUsersList();
+        requestSystemInfo();
+        // Fetch historical sensor readings from DB
+        fetchInitialSensorData();
+        hasData.value = true;
     } else if (data.status === 'disconnected') {
         isConnected.value = false;
         connectionStatus.value = 'Disconnected';
@@ -618,13 +631,25 @@ const handleSystemAlert = (data) => {
 };
 
 const handleSensorData = (data) => {
+    // Extract device_id and sensor_type from topic (sf/sensors/DEVICE_ID/SENSOR_TYPE)
+    // as a fallback when the payload doesn't include them
+    let topicDeviceId = null;
+    let topicSensorType = null;
+    if (data.topic) {
+        const parts = data.topic.split('/');
+        if (parts.length >= 3 && parts[0] === 'sf' && parts[1] === 'sensors') {
+            topicDeviceId = parts[2] || null;
+            topicSensorType = parts[3] || null;
+        }
+    }
+
     const sensorReading = {
         id: Date.now() + Math.random(),
-        device_id: data.data.device_id || 'unknown',
-        sensor_type: data.data.sensor_type || 'unknown',
-        value: data.data.value,
-        unit: data.data.unit || '',
-        timestamp: data.data.timestamp || new Date().toISOString(),
+        device_id: data.data?.device_id || topicDeviceId || 'unknown',
+        sensor_type: data.data?.sensor_type || topicSensorType || 'unknown',
+        value: data.data?.value,
+        unit: data.data?.unit || '',
+        timestamp: data.data?.timestamp || new Date().toISOString(),
         topic: data.topic,
         qos: data.qos,
         retain: data.retain
@@ -735,6 +760,45 @@ const requestSystemInfo = () => {
     });
 };
 
+// Fetch historical sensor readings from REST API
+const fetchInitialSensorData = async () => {
+    try {
+        const response = await apiService.getLatestReadings(20);
+        const readings = response.data.readings || [];
+        // Map REST API field names to the shape handleSensorData uses
+        readings.forEach(r => {
+            const reading = {
+                id: r.id,
+                device_id: r.device_identifier || String(r.device_id),
+                sensor_type: r.sensor_type_name || String(r.sensor_type_id),
+                value: r.value,
+                unit: r.unit,
+                timestamp: r.timestamp,
+                topic: r.mqtt_topic,
+                qos: r.qos,
+                retain: r.retain
+            };
+            // Only add if not already present (avoid duplicates with real-time data)
+            if (!latestSensorData.value.some(s => s.id === reading.id)) {
+                latestSensorData.value.push(reading);
+            }
+            // Auto-discover devices
+            if (reading.device_id && !devices.value.includes(reading.device_id)) {
+                devices.value.push(reading.device_id);
+            }
+        });
+        // Sort newest-first
+        latestSensorData.value.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        // Keep only last 50
+        if (latestSensorData.value.length > 50) {
+            latestSensorData.value = latestSensorData.value.slice(0, 50);
+        }
+        if (readings.length > 0) hasData.value = true;
+    } catch (err) {
+        console.error('Failed to fetch initial sensor data:', err);
+    }
+};
+
 // WebSocket-based refresh that requests all current data
 const refreshData = () => {
     if (!isConnected.value) {
@@ -742,16 +806,20 @@ const refreshData = () => {
         return;
     }
 
-    isLoading.value = true;
+    isRefreshing.value = true;
 
     // Request all data via WebSocket
     requestSystemStatus();
     requestUsersList();
     requestSystemInfo();
 
-    // Set hasData to true since we're now connected
+    // Also refresh historical sensor readings from DB
+    fetchInitialSensorData();
+
     hasData.value = true;
-    isLoading.value = false;
+
+    // Brief visual feedback — data arrives async via WebSocket
+    setTimeout(() => { isRefreshing.value = false; }, 800);
 };
 
 // Connection Management
@@ -778,13 +846,6 @@ const connectWebSocket = async () => {
         ], 1);
 
         showToast('Connected to Smart Factory system', 'success');
-
-        // Request initial data after connection is established
-        setTimeout(() => {
-            requestSystemStatus();
-            requestUsersList();
-            requestSystemInfo();
-        }, 1000); // Give time for subscriptions to be established
 
     } catch (error) {
         connectionStatus.value = 'Error';
@@ -998,8 +1059,8 @@ const loadSettings = () => {
             console.error('Failed to load settings:', err);
         }
     }
-    // Always use the logged-in user's username
-    settings.value.userId = authStore.username || authStore.user?.username || '';
+    // Always use authenticated user's identity, not saved settings
+    settings.value.userId = authStore.username || authStore.user?.username || settings.value.userId;
 };
 
 const startAutoRefresh = () => {
@@ -1055,232 +1116,290 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+/* ── Toolbar connection chip ─────────────────────────────── */
 .connection-status {
-    margin-right: 8px;
-    cursor: pointer;
-    transition: opacity 0.2s;
+  margin-right: 8px;
+  cursor: pointer;
 }
 
-.connection-status:hover {
-    opacity: 0.8;
-}
-
+/* ── Alerts banner ───────────────────────────────────────── */
 .alerts-banner {
-    padding: 8px 16px;
-    background: var(--ion-color-light);
-}
-
-.alert-card {
-    margin-bottom: 8px;
+  padding: 4px 0;
 }
 
 .alert-header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
 }
 
 .alert-level {
-    font-weight: bold;
-    font-size: 0.8em;
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .alert-time {
-    font-size: 0.7em;
-    color: var(--ion-color-medium);
-    margin-left: auto;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.7);
+  margin-left: auto;
 }
 
 .alert-message {
-    margin: 8px 0;
-    font-weight: 500;
+  margin: 0 0 6px;
+  font-weight: 500;
+  font-size: 14px;
 }
 
 .alert-details {
-    background: rgba(255, 255, 255, 0.3);
-    padding: 8px;
-    border-radius: 4px;
-    font-family: monospace;
-    font-size: 0.7em;
-    max-height: 100px;
-    overflow-y: auto;
+  background: rgba(255, 255, 255, 0.15);
+  padding: 8px;
+  border-radius: 6px;
+  font-family: monospace;
+  font-size: 11px;
+  max-height: 80px;
+  overflow-y: auto;
 }
 
-.loading-container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 200px;
-    gap: 16px;
-}
-
+/* ── Stats row ───────────────────────────────────────────── */
 .stats-section {
-    padding: 16px;
+  padding: 8px 4px 0;
 }
 
 .stat-card {
-    height: 100px;
-    margin: 0;
+  margin: 8px;
 }
 
 .stat-content {
-    display: flex;
-    align-items: center;
-    height: 100%;
-    gap: 12px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 4px 0;
 }
 
 .stat-icon {
-    font-size: 2rem;
-    flex-shrink: 0;
+  font-size: 32px;
+  flex-shrink: 0;
 }
 
 .stat-info h2 {
-    margin: 0;
-    font-size: 1.8rem;
-    font-weight: bold;
+  margin: 0;
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--ion-color-dark);
+  line-height: 1;
 }
 
 .stat-info p {
-    margin: 4px 0 0 0;
-    font-size: 0.8rem;
-    color: var(--ion-color-medium);
+  margin: 4px 0 0;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--ion-color-medium);
 }
 
+/* ── Sensor grid ─────────────────────────────────────────── */
 .sensor-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 12px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
 }
 
 .sensor-item {
-    background: var(--ion-color-light);
-    padding: 12px;
-    border-radius: 8px;
-    border-left: 4px solid var(--ion-color-primary);
+  background: var(--ion-color-light);
+  padding: 12px 14px;
+  border-radius: 10px;
+  border-left: 3px solid var(--ion-color-primary);
 }
 
 .sensor-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
 }
 
 .device-id {
-    font-weight: bold;
-    font-size: 0.9em;
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--ion-color-dark);
 }
 
 .sensor-value {
-    font-size: 1.4em;
-    font-weight: bold;
-    margin-bottom: 4px;
+  font-size: 22px;
+  font-weight: 700;
+  margin-bottom: 2px;
+  color: var(--ion-color-dark);
+}
+
+.sensor-value small {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--ion-color-medium);
 }
 
 .sensor-time {
-    font-size: 0.7em;
-    color: var(--ion-color-medium);
+  font-size: 11px;
+  color: var(--ion-color-medium);
 }
 
-.user-avatar {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--ion-color-primary);
-    color: white;
-    font-weight: bold;
-    border-radius: 50%;
-}
-
+/* ── MQTT user list ──────────────────────────────────────── */
 .user-status {
-    margin-top: 4px;
+  margin-top: 2px;
 }
 
-.empty-state {
-    text-align: center;
-    padding: 40px 20px;
-    color: var(--ion-color-medium);
-}
-
+/* ── Device overview cards ───────────────────────────────── */
 .device-card {
-    background: var(--ion-color-light);
-    padding: 16px;
-    border-radius: 8px;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
+  background: var(--ion-color-light);
+  padding: 14px 16px;
+  border-radius: 10px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .device-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .device-header h4 {
-    margin: 0;
-    font-size: 1rem;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ion-color-dark);
 }
 
 .device-sensors {
-    margin-bottom: 12px;
-    flex: 1;
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
+/* ── Security status ─────────────────────────────────────── */
 .security-item {
-    text-align: center;
-    padding: 16px;
+  text-align: center;
+  padding: 12px 8px;
 }
 
 .security-item h4 {
-    margin: 0 0 8px 0;
-    font-size: 1rem;
+  margin: 0 0 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ion-color-dark);
 }
 
 .security-item p {
-    margin: 8px 0;
-    font-size: 0.8rem;
-    color: var(--ion-color-medium);
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--ion-color-medium);
 }
 
 .security-actions {
-    display: flex;
-    gap: 8px;
-    margin-top: 16px;
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+  flex-wrap: wrap;
 }
 
+/* ── Quick actions grid ──────────────────────────────────── */
 .action-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 8px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
 }
 
-@media (max-width: 768px) {
-    .stats-section {
-        padding: 8px;
-    }
+@media (max-width: 576px) {
+  .sensor-grid,
+  .action-grid {
+    grid-template-columns: 1fr;
+  }
 
-    .stat-content {
-        flex-direction: column;
-        text-align: center;
-    }
+  .security-actions {
+    flex-direction: column;
+  }
+}
 
-    .sensor-grid {
-        grid-template-columns: 1fr;
-    }
+/* ── Custom toast notifications ──────────────────────────── */
+.toast-container {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 99999;
+  width: calc(100% - 32px);
+  max-width: 440px;
+  pointer-events: none;
+}
 
-    .security-actions {
-        flex-direction: column;
-    }
+.toast-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
 
-    .action-grid {
-        grid-template-columns: 1fr;
-    }
+.custom-toast {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.14), 0 2px 8px rgba(0, 0, 0, 0.08);
+  border-left: 4px solid var(--toast-accent);
+  pointer-events: all;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.toast-primary  { --toast-accent: var(--ion-color-primary); }
+.toast-success  { --toast-accent: var(--ion-color-success); }
+.toast-warning  { --toast-accent: var(--ion-color-warning); }
+.toast-danger   { --toast-accent: var(--ion-color-danger); }
+
+.toast-icon {
+  font-size: 20px;
+  color: var(--toast-accent);
+  flex-shrink: 0;
+}
+
+.toast-message {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ion-color-dark);
+  line-height: 1.4;
+}
+
+.toast-close {
+  --color: var(--ion-color-medium);
+  --padding-start: 4px;
+  --padding-end: 4px;
+  margin: -6px -6px -6px 0;
+  flex-shrink: 0;
+}
+
+/* Slide-up / fade animation */
+.toast-enter-active {
+  animation: toast-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.toast-leave-active {
+  animation: toast-out 0.22s ease both;
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(16px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0)   scale(1); }
+}
+
+@keyframes toast-out {
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(-8px); }
 }
 </style>

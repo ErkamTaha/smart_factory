@@ -20,6 +20,7 @@ import '@ionic/vue/css/display.css'
 
 /* Theme variables */
 import './theme/variables.css'
+import './theme/global.css'
 
 import App from './App.vue'
 import router from './router'

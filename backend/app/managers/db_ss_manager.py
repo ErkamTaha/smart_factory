@@ -71,7 +71,7 @@ class DatabaseSSManager:
 
     async def reload(self, db: AsyncSession):
         """Reload SS configuration from database"""
-        await self._load_config(db)
+        await self._load_config()
         self._sensor_cache.clear()
         self._type_cache.clear()
 

@@ -48,7 +48,7 @@ class DatabaseACLManager:
 
     async def reload(self, db: AsyncSession):
         """Reload ACL configuration"""
-        await self._load_config(db)
+        await self._load_config()
         self._user_cache.clear()
 
     # -------------------------------
@@ -195,8 +195,16 @@ class DatabaseACLManager:
     ):
         """Log permission check to audit log"""
         try:
+            # Resolve username to integer user_id (required by ACLAuditLog FK)
+            user_result = await db.execute(
+                select(ACLUser).where(ACLUser.username == username)
+            )
+            user = user_result.scalars().first()
+            if not user:
+                # Cannot log without a valid user_id FK
+                return
             entry = ACLAuditLog(
-                username=username,
+                user_id=user.id,
                 action="permission_check",
                 resource=f"{action}:{topic}",
                 result=result,

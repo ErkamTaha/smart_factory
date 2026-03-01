@@ -1,0 +1,185 @@
+/* ============================================================
+   Smart Factory – Global Design System
+   Extends the Login/Register design language app-wide
+   ============================================================ */
+
+/* ── Page background ─────────────────────────────────────── */
+ion-content {
+  --background: var(--ion-color-light);
+}
+
+/* ── Cards ───────────────────────────────────────────────── */
+ion-card {
+  border-radius: 16px;
+  --box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  margin: 12px 16px;
+}
+
+ion-card-header {
+  padding-bottom: 4px;
+}
+
+ion-card-title {
+  font-size: 16px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── Buttons ─────────────────────────────────────────────── */
+ion-button {
+  --border-radius: 8px;
+}
+
+/* ── Segment controls ────────────────────────────────────── */
+ion-segment {
+  margin: 16px 16px 0;
+  border-radius: 10px;
+  background: var(--ion-color-light-shade);
+  --background: var(--ion-color-light-shade);
+}
+
+ion-segment-button {
+  --border-radius: 8px;
+  font-weight: 500;
+  font-size: 13px;
+  min-height: 36px;
+}
+
+/* ── Shared stat-item (used in ACL / SS / Dashboard) ─────── */
+.stat-item {
+  text-align: center;
+  padding: 16px 8px;
+}
+
+.stat-item h2 {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--ion-color-dark);
+  margin: 0 0 4px;
+  line-height: 1;
+}
+
+.stat-item p {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--ion-color-medium);
+  margin: 0;
+}
+
+/* ── Section label (used above groups) ──────────────────── */
+.section-label {
+  padding: 20px 20px 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ion-color-medium);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* ── Loading state ───────────────────────────────────────── */
+.page-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  gap: 16px;
+  color: var(--ion-color-medium);
+}
+
+.page-loading p {
+  margin: 0;
+  font-size: 14px;
+}
+
+/* ── Empty state ─────────────────────────────────────────── */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  color: var(--ion-color-medium);
+  text-align: center;
+  gap: 12px;
+}
+
+.empty-state ion-icon {
+  font-size: 52px;
+  opacity: 0.35;
+}
+
+.empty-state p {
+  font-size: 15px;
+  margin: 0;
+}
+
+/* ── Item avatar initial ─────────────────────────────────── */
+.item-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ion-color-primary);
+  color: white;
+  font-weight: 700;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+
+/* ── Timestamp helper ────────────────────────────────────── */
+.text-muted {
+  font-size: 11px;
+  color: var(--ion-color-medium);
+}
+
+/* ── Error / success inline messages ─────────────────────── */
+.inline-error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ion-color-danger);
+  font-size: 13px;
+  padding: 8px 16px;
+  margin-top: 4px;
+}
+
+.inline-success {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ion-color-success);
+  font-size: 13px;
+  padding: 8px 16px;
+  margin-top: 4px;
+}
+
+/* ── Action button row ───────────────────────────────────── */
+.action-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+
+.action-row ion-button {
+  flex: 1;
+}
+
+/* ── Toolbar on primary – light icon buttons ─────────────── */
+ion-toolbar[color="primary"] ion-button[fill="clear"] {
+  --color: rgba(255, 255, 255, 0.9);
+}
+
+/* ── Subtle divider ──────────────────────────────────────── */
+.card-divider {
+  height: 1px;
+  background: var(--ion-color-light-shade);
+  margin: 12px 0;
+}

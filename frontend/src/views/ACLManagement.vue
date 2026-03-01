@@ -1,13 +1,13 @@
 <template>
     <ion-page>
-        <ion-header>
+        <ion-header :translucent="true">
             <ion-toolbar color="primary">
                 <ion-buttons slot="start">
-                    <ion-back-button default-href="/"></ion-back-button>
+                    <ion-back-button color="light" default-href="/dashboard"></ion-back-button>
                 </ion-buttons>
                 <ion-title>ACL Management</ion-title>
                 <ion-buttons slot="end">
-                    <ion-button @click="refreshData" :disabled="isLoading">
+                    <ion-button color="light" title="Refresh" @click="refreshData" :disabled="isLoading">
                         <ion-icon :icon="refreshOutline" slot="icon-only"></ion-icon>
                     </ion-button>
                 </ion-buttons>
@@ -52,7 +52,7 @@
                             </ion-col>
                         </ion-row>
                     </ion-grid>
-                    <div class="acl-actions">
+                    <div class="action-row">
                         <ion-button @click="reloadACL" fill="outline">
                             <ion-icon :icon="refreshOutline" slot="start"></ion-icon>
                             Reload ACL
@@ -124,9 +124,9 @@
                             @ion-input="filterUsers"></ion-searchbar>
 
                         <ion-list>
-                            <ion-item v-for="user in filteredUsers" :key="user.user_id">
+                            <ion-item v-for="user in filteredUsers" :key="user.username">
                                 <ion-label>
-                                    <h2>{{ user.user_id }}</h2>
+                                    <h2>{{ user.username }}</h2>
                                     <p>
                                         <ion-chip v-for="role in user.roles" :key="role" color="primary" size="small">
                                             {{ role }}
@@ -141,7 +141,7 @@
                                 <ion-button slot="end" fill="clear" @click="viewUserDetails(user)">
                                     <ion-icon :icon="eyeOutline"></ion-icon>
                                 </ion-button>
-                                <ion-button slot="end" fill="clear" color="danger" @click="deleteUser(user.user_id)">
+                                <ion-button slot="end" fill="clear" color="danger" @click="deleteUser(user.username)">
                                     <ion-icon :icon="trashOutline"></ion-icon>
                                 </ion-button>
                             </ion-item>
@@ -199,9 +199,9 @@
                                     <ion-item>
                                         <ion-select v-model="permCheck.userId" label="User" placeholder="Select user"
                                             label-placement="stacked">
-                                            <ion-select-option v-for="user in users" :key="user.user_id"
-                                                :value="user.user_id">
-                                                {{ user.user_id }}
+                                            <ion-select-option v-for="user in users" :key="user.username"
+                                                :value="user.username">
+                                                {{ user.username }}
                                             </ion-select-option>
                                         </ion-select>
                                     </ion-item>
@@ -238,7 +238,7 @@
                                             :icon="permCheckResult.allowed ? checkmarkCircleOutline : closeCircleOutline"></ion-icon>
                                         <h3>{{ permCheckResult.allowed ? 'ALLOWED' : 'DENIED' }}</h3>
                                     </div>
-                                    <p><strong>User:</strong> {{ permCheckResult.user_id }}</p>
+                                    <p><strong>User:</strong> {{ permCheckResult.username }}</p>
                                     <p><strong>Topic:</strong> {{ permCheckResult.topic }}</p>
                                     <p><strong>Action:</strong> {{ permCheckResult.action }}</p>
                                 </ion-card-content>
@@ -252,7 +252,7 @@
             <ion-modal :is-open="showEditModal" @will-dismiss="showEditModal = false">
                 <ion-header>
                     <ion-toolbar>
-                        <ion-title>Edit User: {{ editingUser?.user_id }}</ion-title>
+                        <ion-title>Edit User: {{ editingUser?.username }}</ion-title>
                         <ion-buttons slot="end">
                             <ion-button @click="showEditModal = false">
                                 <ion-icon :icon="closeOutline"></ion-icon>
@@ -282,7 +282,7 @@
             <ion-modal :is-open="showDetailsModal" @will-dismiss="showDetailsModal = false">
                 <ion-header>
                     <ion-toolbar>
-                        <ion-title>User Details: {{ selectedUser?.user_id }}</ion-title>
+                        <ion-title>User Details: {{ selectedUser?.username }}</ion-title>
                         <ion-buttons slot="end">
                             <ion-button @click="showDetailsModal = false">
                                 <ion-icon :icon="closeOutline"></ion-icon>
@@ -297,7 +297,7 @@
                                 <ion-card-title>Basic Information</ion-card-title>
                             </ion-card-header>
                             <ion-card-content>
-                                <p><strong>User ID:</strong> {{ selectedUser.user_id }}</p>
+                                <p><strong>Username:</strong> {{ selectedUser.username }}</p>
                                 <p><strong>Roles:</strong></p>
                                 <div class="roles-list">
                                     <ion-chip v-for="role in selectedUser.roles" :key="role" color="primary">
@@ -515,7 +515,7 @@ const refreshData = async () => {
 const createUser = async () => {
     try {
         await apiService.createUser({
-            user_id: newUser.value.userId,
+            username: newUser.value.userId,
             roles: newUser.value.roles,
             custom_permissions: []
         });
@@ -536,7 +536,7 @@ const editUser = (user) => {
 
 const updateUser = async () => {
     try {
-        await apiService.updateUser(editingUser.value.user_id, {
+        await apiService.updateUser(editingUser.value.username, {
             roles: editingUser.value.roles
         });
 
@@ -582,13 +582,12 @@ const viewUserDetails = (user) => {
 // Permission checking
 const checkPermission = async () => {
     try {
-        permCheckResult.value = await apiService.checkPermission(
-            {
-                user_id: permCheck.value.userId,
-                topic: permCheck.value.topic,
-                action: permCheck.value.action
-            }
-        );
+        const result = await apiService.checkPermission({
+            username: permCheck.value.userId,
+            topic: permCheck.value.topic,
+            action: permCheck.value.action
+        });
+        permCheckResult.value = result.data;
     } catch (err) {
         showToast('Failed to check permission', 'danger');
     }
@@ -599,7 +598,7 @@ const filterUsers = () => {
     const term = userSearchTerm.value.toLowerCase();
     if (term) {
         filteredUsers.value = users.value.filter(user =>
-            user.user_id.toLowerCase().includes(term) ||
+            user.username.toLowerCase().includes(term) ||
             user.roles.some(role => role.toLowerCase().includes(term))
         );
     } else {
@@ -634,112 +633,77 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.stat-item {
-    text-align: center;
-    padding: 16px;
-}
-
-.stat-item h2 {
-    margin: 0;
-    font-size: 2rem;
-    font-weight: bold;
-    color: var(--ion-color-primary);
-}
-
-.stat-item p {
-    margin: 8px 0 0 0;
-    font-size: 0.8rem;
-    color: var(--ion-color-medium);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-.acl-actions {
-    display: flex;
-    gap: 8px;
-    margin-top: 16px;
-}
+/* stat-item and action-row are provided by global.css */
 
 .user-permissions {
-    font-size: 0.8rem;
-    color: var(--ion-color-medium);
-    margin-top: 4px;
-}
-
-.role-item {
-    margin-bottom: 16px;
+  font-size: 12px;
+  color: var(--ion-color-medium);
+  margin-top: 4px;
 }
 
 .role-permissions {
-    margin-top: 12px;
+  margin-top: 12px;
 }
 
 .role-permissions h4 {
-    margin: 0 0 8px 0;
-    font-size: 0.9rem;
-    color: var(--ion-color-medium);
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--ion-color-medium);
 }
 
 .permission-item {
-    margin-bottom: 8px;
-    padding: 8px;
-    background: var(--ion-color-light);
-    border-radius: 4px;
+  margin-bottom: 8px;
+  padding: 10px 12px;
+  background: var(--ion-color-light);
+  border-radius: 8px;
 }
 
 .permission-item strong {
-    display: block;
-    margin-bottom: 4px;
-    font-family: monospace;
-    font-size: 0.85rem;
+  display: block;
+  margin-bottom: 6px;
+  font-family: monospace;
+  font-size: 13px;
 }
 
 .permission-actions {
-    display: flex;
-    gap: 4px;
-    flex-wrap: wrap;
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
 }
 
 .permission-result .result-header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
 }
 
 .permission-result h3 {
-    margin: 0;
-    font-size: 1.2rem;
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
 }
 
 .roles-list {
-    margin-top: 8px;
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
 .permission-detail {
-    margin-bottom: 16px;
-    padding: 12px;
-    background: var(--ion-color-light);
-    border-radius: 8px;
+  margin-bottom: 12px;
+  padding: 12px;
+  background: var(--ion-color-light);
+  border-radius: 8px;
 }
 
 .permission-detail h4 {
-    margin: 0 0 8px 0;
-    font-family: monospace;
-    font-size: 0.9rem;
-}
-
-@media (max-width: 768px) {
-    .acl-actions {
-        flex-direction: column;
-    }
-
-    .permission-actions {
-        justify-content: flex-start;
-    }
-
-    .stat-item h2 {
-        font-size: 1.5rem;
-    }
+  margin: 0 0 8px;
+  font-family: monospace;
+  font-size: 13px;
 }
 </style>

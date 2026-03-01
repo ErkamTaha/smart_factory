@@ -1,13 +1,13 @@
 <template>
     <ion-page>
-        <ion-header>
-            <ion-toolbar>
+        <ion-header :translucent="true">
+            <ion-toolbar color="primary">
                 <ion-buttons slot="start">
-                    <ion-back-button default-href="/dashboard"></ion-back-button>
+                    <ion-back-button color="light" default-href="/dashboard"></ion-back-button>
                 </ion-buttons>
                 <ion-title>{{ deviceId }}</ion-title>
                 <ion-buttons slot="end">
-                    <ion-button @click="refreshDeviceData" :disabled="isLoading">
+                    <ion-button color="light" title="Refresh" @click="refreshDeviceData" :disabled="isLoading">
                         <ion-icon :icon="refreshOutline" slot="icon-only"></ion-icon>
                     </ion-button>
                 </ion-buttons>
@@ -15,8 +15,8 @@
         </ion-header>
 
         <ion-content>
-            <div v-if="isLoading" class="loading-container">
-                <ion-spinner name="crescent"></ion-spinner>
+            <div v-if="isLoading" class="page-loading">
+                <ion-spinner name="crescent" color="primary"></ion-spinner>
                 <p>Loading device data...</p>
             </div>
 
@@ -24,7 +24,10 @@
                 <!-- Device info card -->
                 <ion-card>
                     <ion-card-header>
-                        <ion-card-title>Device Information</ion-card-title>
+                        <ion-card-title>
+                            <ion-icon :icon="hardwareChip"></ion-icon>
+                            Device Information
+                        </ion-card-title>
                     </ion-card-header>
                     <ion-card-content>
                         <ion-list>
@@ -59,7 +62,10 @@
                 <!-- Sensor readings -->
                 <ion-card v-if="deviceData.length > 0">
                     <ion-card-header>
-                        <ion-card-title>Recent Readings</ion-card-title>
+                        <ion-card-title>
+                            <ion-icon :icon="thermometerOutline"></ion-icon>
+                            Recent Readings
+                        </ion-card-title>
                     </ion-card-header>
                     <ion-card-content>
                         <ion-list>
@@ -69,7 +75,7 @@
                                 <ion-label>
                                     <h3>{{ reading.sensor_type }}</h3>
                                     <p>{{ reading.value }} {{ reading.unit }}</p>
-                                    <p class="timestamp">{{ formatTimestamp(reading.timestamp) }}</p>
+                                    <p class="text-muted">{{ formatTimestamp(reading.timestamp) }}</p>
                                 </ion-label>
                                 <ion-chip slot="end" :color="getSensorColor(reading.sensor_type)">
                                     {{ reading.value }}
@@ -95,7 +101,10 @@
                 <!-- Send command section -->
                 <ion-card>
                     <ion-card-header>
-                        <ion-card-title>Send Command</ion-card-title>
+                        <ion-card-title>
+                            <ion-icon :icon="send"></ion-icon>
+                            Send Command
+                        </ion-card-title>
                     </ion-card-header>
                     <ion-card-content>
                         <ion-list>
@@ -212,22 +221,5 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.loading-container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 200px;
-}
-
-.empty-state {
-    text-align: center;
-    padding: 40px 20px;
-    color: var(--ion-color-medium);
-}
-
-.timestamp {
-    font-size: 0.7rem;
-    color: var(--ion-color-medium);
-}
+/* page-loading, empty-state, text-muted are in global.css */
 </style>

@@ -1,18 +1,16 @@
 <template>
     <ion-page>
-        <ion-header>
+        <ion-header :translucent="true">
             <ion-toolbar color="primary">
                 <ion-buttons slot="start">
-                    <ion-back-button default-href="/"></ion-back-button>
+                    <ion-back-button color="light" default-href="/dashboard"></ion-back-button>
                 </ion-buttons>
-                <ion-title>MQTT Test & Management</ion-title>
+                <ion-title>MQTT Test</ion-title>
                 <ion-buttons slot="end">
-                    <ion-button @click="activeTab = 'mqtt'" :class="{ 'active-tab': activeTab === 'mqtt' }">
-                        MQTT
-                    </ion-button>
-                    <ion-button @click="activeTab = 'acl'" :class="{ 'active-tab': activeTab === 'acl' }">
-                        ACL
-                    </ion-button>
+                    <ion-button color="light" :class="{ 'active-tab': activeTab === 'mqtt' }"
+                        @click="activeTab = 'mqtt'">MQTT</ion-button>
+                    <ion-button color="light" :class="{ 'active-tab': activeTab === 'acl' }"
+                        @click="activeTab = 'acl'">ACL</ion-button>
                 </ion-buttons>
             </ion-toolbar>
         </ion-header>
@@ -73,7 +71,10 @@
                         <ion-col size="12" size-lg="6">
                             <ion-card>
                                 <ion-card-header>
-                                    <ion-card-title>ðŸ“¥ Subscribe</ion-card-title>
+                                    <ion-card-title>
+                                <ion-icon :icon=”addCircleOutline”></ion-icon>
+                                Subscribe
+                            </ion-card-title>
                                 </ion-card-header>
                                 <ion-card-content>
                                     <ion-item>
@@ -112,7 +113,10 @@
                         <ion-col size="12" size-lg="6">
                             <ion-card>
                                 <ion-card-header>
-                                    <ion-card-title>ðŸ“¤ Publish</ion-card-title>
+                                    <ion-card-title>
+                                <ion-icon :icon=”sendOutline”></ion-icon>
+                                Publish
+                            </ion-card-title>
                                 </ion-card-header>
                                 <ion-card-content>
                                     <ion-item>
@@ -163,7 +167,10 @@
                 <!-- Quick Actions -->
                 <ion-card>
                     <ion-card-header>
-                        <ion-card-title>âš¡ Quick Actions</ion-card-title>
+                        <ion-card-title>
+                        <ion-icon :icon="flashOutline"></ion-icon>
+                        Quick Actions
+                    </ion-card-title>
                     </ion-card-header>
                     <ion-card-content>
                         <ion-grid>
@@ -201,8 +208,9 @@
                 <ion-card>
                     <ion-card-header>
                         <ion-card-title>
-                            ðŸ’¬ Messages ({{ messages.length }})
-                            <ion-button size="small" fill="clear" @click="clearMessages" class="ion-float-right">
+                            <ion-icon :icon="chatbubbleEllipsesOutline"></ion-icon>
+                            Messages ({{ messages.length }})
+                            <ion-button size="small" fill="clear" @click="clearMessages" style="margin-left:auto">
                                 <ion-icon :icon="trashOutline"></ion-icon>
                             </ion-button>
                         </ion-card-title>
@@ -224,8 +232,8 @@
                                 <div v-if="msg.topic" class="topic">{{ msg.topic }}</div>
                                 <div class="payload">{{ msg.payload }}</div>
                             </div>
-                            <div v-if="messages.length === 0" class="no-messages">
-                                <ion-icon :icon="chatbubbleEllipsesOutline" size="large"></ion-icon>
+                            <div v-if="messages.length === 0" class="empty-state">
+                                <ion-icon :icon="chatbubbleEllipsesOutline"></ion-icon>
                                 <p>No messages yet. Connect and subscribe to see messages.</p>
                             </div>
                         </div>
@@ -239,9 +247,10 @@
                 <ion-card>
                     <ion-card-header>
                         <ion-card-title>
-                            ðŸ”’ ACL Information
-                            <ion-button size="small" fill="clear" @click="loadAclInfo" class="ion-float-right">
-                                <ion-icon :icon="refreshOutline"></ion-icon>
+                            <ion-icon :icon=”shieldCheckmarkOutline”></ion-icon>
+                            ACL Information
+                            <ion-button size=”small” fill=”clear” @click=”loadAclInfo” style=”margin-left:auto”>
+                                <ion-icon :icon=”refreshOutline”></ion-icon>
                             </ion-button>
                         </ion-card-title>
                     </ion-card-header>
@@ -249,27 +258,27 @@
                         <ion-grid v-if="aclInfo">
                             <ion-row>
                                 <ion-col size="6" size-md="3">
-                                    <div class="stat-card">
-                                        <div class="stat-value">{{ aclInfo.total_users }}</div>
-                                        <div class="stat-label">Total Users</div>
+                                    <div class="stat-item">
+                                        <h2>{{ aclInfo.total_users }}</h2>
+                                        <p>Total Users</p>
                                     </div>
                                 </ion-col>
                                 <ion-col size="6" size-md="3">
-                                    <div class="stat-card">
-                                        <div class="stat-value">{{ aclInfo.total_roles }}</div>
-                                        <div class="stat-label">Total Roles</div>
+                                    <div class="stat-item">
+                                        <h2>{{ aclInfo.total_roles }}</h2>
+                                        <p>Total Roles</p>
                                     </div>
                                 </ion-col>
                                 <ion-col size="6" size-md="3">
-                                    <div class="stat-card">
-                                        <div class="stat-value">{{ aclInfo.default_policy }}</div>
-                                        <div class="stat-label">Default Policy</div>
+                                    <div class="stat-item">
+                                        <h2>{{ aclInfo.default_policy }}</h2>
+                                        <p>Default Policy</p>
                                     </div>
                                 </ion-col>
                                 <ion-col size="6" size-md="3">
-                                    <div class="stat-card">
-                                        <div class="stat-value">{{ aclInfo.version }}</div>
-                                        <div class="stat-label">Version</div>
+                                    <div class="stat-item">
+                                        <h2>{{ aclInfo.version }}</h2>
+                                        <p>Version</p>
                                     </div>
                                 </ion-col>
                             </ion-row>
@@ -280,7 +289,10 @@
                 <!-- Create User Card -->
                 <ion-card>
                     <ion-card-header>
-                        <ion-card-title>âž• Create New User</ion-card-title>
+                        <ion-card-title>
+                        <ion-icon :icon="personAddOutline"></ion-icon>
+                        Create New User
+                    </ion-card-title>
                     </ion-card-header>
                     <ion-card-content>
                         <ion-item>
@@ -307,7 +319,10 @@
                 <!-- Available Roles Card -->
                 <ion-card>
                     <ion-card-header>
-                        <ion-card-title>ðŸ‘¥ Available Roles</ion-card-title>
+                        <ion-card-title>
+                        <ion-icon :icon="peopleOutline"></ion-icon>
+                        Available Roles
+                    </ion-card-title>
                     </ion-card-header>
                     <ion-card-content>
                         <ion-list>
@@ -329,17 +344,18 @@
                 <ion-card>
                     <ion-card-header>
                         <ion-card-title>
-                            ðŸ‘¤ Users ({{ usersList.length }})
-                            <ion-button size="small" fill="clear" @click="loadUsers" class="ion-float-right">
+                            <ion-icon :icon="peopleOutline"></ion-icon>
+                            Users ({{ usersList.length }})
+                            <ion-button size="small" fill="clear" @click="loadUsers" style="margin-left:auto">
                                 <ion-icon :icon="refreshOutline"></ion-icon>
                             </ion-button>
                         </ion-card-title>
                     </ion-card-header>
                     <ion-card-content>
                         <ion-list>
-                            <ion-item v-for="user in usersList" :key="user.user_id">
+                            <ion-item v-for="user in usersList" :key="user.username">
                                 <ion-label>
-                                    <h2>{{ user.user_id }}</h2>
+                                    <h2>{{ user.username }}</h2>
                                     <p>
                                         <ion-chip v-for="role in user.roles" :key="role" color="primary" size="small">
                                             {{ role }}
@@ -349,7 +365,7 @@
                                 <ion-button slot="end" fill="clear" @click="showUserDetails(user)">
                                     <ion-icon :icon="informationCircleOutline"></ion-icon>
                                 </ion-button>
-                                <ion-button slot="end" fill="clear" color="danger" @click="deleteUser(user.user_id)">
+                                <ion-button slot="end" fill="clear" color="danger" @click="deleteUser(user.username)">
                                     <ion-icon :icon="trashOutline"></ion-icon>
                                 </ion-button>
                             </ion-item>
@@ -360,7 +376,10 @@
                 <!-- Permission Checker Card -->
                 <ion-card>
                     <ion-card-header>
-                        <ion-card-title>ðŸ” Check Permissions</ion-card-title>
+                        <ion-card-title>
+                            <ion-icon :icon="checkmarkCircleOutline"></ion-icon>
+                            Check Permissions
+                        </ion-card-title>
                     </ion-card-header>
                     <ion-card-content>
                         <ion-item>
@@ -442,6 +461,9 @@ import {
     personAddOutline,
     informationCircleOutline,
     checkmarkCircleOutline,
+    flashOutline,
+    shieldCheckmarkOutline,
+    peopleOutline,
 } from 'ionicons/icons';
 import webSocketService from '@/services/websocket';
 
@@ -603,7 +625,8 @@ const connect = async () => {
     addMessage('system', { payload: `Connecting as user: ${userId.value}` });
 
     try {
-        await webSocketService.connect(wsUrl.value, userId.value);
+        const token = localStorage.getItem('access_token') || '';
+        await webSocketService.connect(wsUrl.value, userId.value, token);
     } catch (error) {
         connectionStatus.value = 'Error';
         addMessage('error', { payload: 'Failed to connect' });
@@ -727,8 +750,8 @@ const loadRoles = async () => {
     try {
         const response = await fetch(`${API_BASE}/api/acl/roles`);
         const data = await response.json();
-        rolesData.value = data.roles;
-        availableRoles.value = Object.keys(data.roles);
+        rolesData.value = data;
+        availableRoles.value = Object.keys(data);
     } catch (error) {
         showToast('Failed to load roles', 'danger');
     }
@@ -738,7 +761,7 @@ const loadUsers = async () => {
     try {
         const response = await fetch(`${API_BASE}/api/acl/users`);
         const data = await response.json();
-        usersList.value = data.users;
+        usersList.value = data;
     } catch (error) {
         showToast('Failed to load users', 'danger');
     }
@@ -755,7 +778,7 @@ const createUser = async () => {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                user_id: newUser.value.userId,
+                username: newUser.value.userId,
                 roles: newUser.value.roles,
                 custom_permissions: [],
             }),
@@ -809,7 +832,7 @@ const deleteUser = async (userId) => {
 
 const showUserDetails = async (user) => {
     const alert = await alertController.create({
-        header: `User: ${user.user_id}`,
+        header: `User: ${user.username}`,
         message: `
       <strong>Roles:</strong> ${user.roles.join(', ')}<br><br>
       <strong>Permissions:</strong> ${user.permissions.length} permission(s)
@@ -830,7 +853,7 @@ const checkPermission = async () => {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                user_id: permCheck.value.userId,
+                username: permCheck.value.userId,
                 topic: permCheck.value.topic,
                 action: permCheck.value.action,
             }),
@@ -878,159 +901,73 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+/* stat-item and empty-state are provided by global.css */
+/* ion-card styles are overridden by global.css */
+
 .active-tab {
-    --background: rgba(255, 255, 255, 0.2);
+  --background: rgba(255, 255, 255, 0.2);
+  --color: white;
 }
 
-/* Fix ion-item spacing for stacked labels */
-ion-item {
-    --padding-top: 8px;
-    --padding-bottom: 8px;
-    --inner-padding-end: 0;
-}
-
-ion-item ion-label[position="stacked"] {
-    margin-bottom: 8px;
-    font-weight: 500;
-    font-size: 0.875rem;
-}
-
-ion-item ion-input,
-ion-item ion-textarea,
-ion-item ion-select {
-    margin-top: 4px;
-}
-
-/* Ensure toggle has proper spacing */
-ion-toggle {
-    margin-top: 8px;
-}
-
+/* ── Messages log ─────────────────────────────────────────── */
 .messages-container {
-    max-height: 400px;
-    overflow-y: auto;
-    background: var(--ion-color-light);
-    border-radius: 8px;
-    padding: 12px;
+  max-height: 420px;
+  overflow-y: auto;
+  background: var(--ion-color-light);
+  border-radius: 10px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .message {
-    background: white;
-    border-left: 4px solid var(--ion-color-primary);
-    padding: 12px;
-    margin-bottom: 12px;
-    border-radius: 4px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  background: white;
+  border-left: 3px solid var(--ion-color-primary);
+  padding: 10px 12px;
+  border-radius: 6px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
 }
 
-.message.sent {
-    border-left-color: var(--ion-color-success);
-}
-
-.message.received {
-    border-left-color: var(--ion-color-tertiary);
-}
-
-.message.system {
-    border-left-color: var(--ion-color-warning);
-}
-
-.message.error {
-    border-left-color: var(--ion-color-danger);
-}
+.message.sent     { border-left-color: var(--ion-color-success); }
+.message.received { border-left-color: var(--ion-color-tertiary); }
+.message.system   { border-left-color: var(--ion-color-warning); }
+.message.error    { border-left-color: var(--ion-color-danger); }
 
 .message-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
 }
 
 .timestamp {
-    font-size: 0.85em;
-    color: var(--ion-color-medium);
-    font-family: monospace;
+  font-size: 11px;
+  color: var(--ion-color-medium);
+  font-family: monospace;
 }
 
 .topic {
-    font-weight: 600;
-    color: var(--ion-color-primary);
-    margin-bottom: 8px;
-    font-family: monospace;
+  font-weight: 600;
+  color: var(--ion-color-primary);
+  margin-bottom: 6px;
+  font-family: monospace;
+  font-size: 13px;
 }
 
 .payload {
-    font-family: monospace;
-    font-size: 0.9em;
-    white-space: pre-wrap;
-    word-break: break-all;
-    color: var(--ion-color-dark);
-}
-
-.no-messages {
-    text-align: center;
-    padding: 60px 20px;
-    color: var(--ion-color-medium);
-}
-
-.no-messages ion-icon {
-    font-size: 64px;
-    opacity: 0.5;
-}
-
-.no-messages p {
-    margin-top: 16px;
-    font-size: 0.95em;
+  font-family: monospace;
+  font-size: 13px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--ion-color-dark);
 }
 
 .subscriptions-label {
-    display: block;
-    margin-bottom: 8px;
-    font-weight: 600;
-    color: var(--ion-color-dark);
-}
-
-.stat-card {
-    background: var(--ion-color-light);
-    padding: 20px;
-    border-radius: 8px;
-    text-align: center;
-}
-
-.stat-value {
-    font-size: 2em;
-    font-weight: bold;
-    color: var(--ion-color-primary);
-    margin-bottom: 8px;
-}
-
-.stat-label {
-    font-size: 0.9em;
-    color: var(--ion-color-medium);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-ion-chip {
-    margin: 4px;
-    cursor: pointer;
-}
-
-ion-card {
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-ion-card-title {
-    font-size: 1.2em;
-}
-
-@media (max-width: 768px) {
-    .stat-value {
-        font-size: 1.5em;
-    }
-
-    .messages-container {
-        max-height: 300px;
-    }
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--ion-color-dark);
 }
 </style>

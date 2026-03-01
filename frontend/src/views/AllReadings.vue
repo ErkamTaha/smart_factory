@@ -1,13 +1,13 @@
 <template>
     <ion-page>
-        <ion-header>
-            <ion-toolbar>
+        <ion-header :translucent="true">
+            <ion-toolbar color="primary">
                 <ion-buttons slot="start">
-                    <ion-back-button default-href="/dashboard"></ion-back-button>
+                    <ion-back-button color="light" default-href="/dashboard"></ion-back-button>
                 </ion-buttons>
                 <ion-title>All Readings</ion-title>
                 <ion-buttons slot="end">
-                    <ion-button @click="refreshData" :disabled="isLoading">
+                    <ion-button color="light" title="Refresh" @click="refreshData" :disabled="isLoading">
                         <ion-icon :icon="refreshOutline" slot="icon-only"></ion-icon>
                     </ion-button>
                 </ion-buttons>
@@ -48,8 +48,8 @@
             </ion-card>
 
             <!-- Loading indicator -->
-            <div v-if="isLoading" class="loading-container">
-                <ion-spinner name="crescent"></ion-spinner>
+            <div v-if="isLoading" class="page-loading">
+                <ion-spinner name="crescent" color="primary"></ion-spinner>
                 <p>Loading readings...</p>
             </div>
 
@@ -57,22 +57,20 @@
             <ion-card v-else-if="filteredReadings.length > 0">
                 <ion-card-header>
                     <ion-card-title>
+                        <ion-icon :icon="thermometerOutline"></ion-icon>
                         Sensor Readings
-                        <ion-chip color="primary">{{ filteredReadings.length }}</ion-chip>
+                        <ion-chip color="primary" style="margin-left:auto">{{ filteredReadings.length }}</ion-chip>
                     </ion-card-title>
                 </ion-card-header>
                 <ion-card-content>
                     <ion-list>
                         <ion-item v-for="reading in filteredReadings"
                             :key="`${reading.device_id}-${reading.sensor_type}-${reading.timestamp}`">
-                            <ion-avatar slot="start">
-                                <div class="device-avatar">{{ reading.device_id.charAt(0).toUpperCase() }}</div>
-                            </ion-avatar>
+                            <div slot="start" class="item-avatar">{{ reading.device_id.charAt(0).toUpperCase() }}</div>
                             <ion-label>
                                 <h3>{{ reading.device_id }}</h3>
-                                <p><strong>{{ reading.sensor_type }}</strong>: {{ reading.value }} {{ reading.unit }}
-                                </p>
-                                <p class="timestamp">{{ formatTimestamp(reading.timestamp) }}</p>
+                                <p><strong>{{ reading.sensor_type }}</strong>: {{ reading.value }} {{ reading.unit }}</p>
+                                <p class="text-muted">{{ formatTimestamp(reading.timestamp) }}</p>
                             </ion-label>
                             <ion-chip slot="end" :color="getSensorColor(reading.sensor_type)">
                                 {{ reading.value }}
@@ -114,10 +112,10 @@ import {
     IonPage, IonHeader, IonToolbar, IonTitle, IonContent, IonButtons,
     IonButton, IonBackButton, IonIcon, IonCard, IonCardContent,
     IonCardHeader, IonCardTitle, IonList, IonItem, IonLabel,
-    IonChip, IonSpinner, IonAvatar, IonSelect, IonSelectOption
+    IonChip, IonSpinner, IonSelect, IonSelectOption
 } from '@ionic/vue';
 import {
-    refreshOutline, cloudOffline
+    refreshOutline, cloudOffline, thermometerOutline
 } from 'ionicons/icons';
 import { useIotStore } from '@/stores/iot';
 
@@ -210,43 +208,8 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.loading-container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 200px;
-}
-
-.empty-state {
-    text-align: center;
-    padding: 40px 20px;
-    color: var(--ion-color-medium);
-}
-
-.filter-info {
-    font-size: 0.9rem;
-    margin-top: 8px;
-}
-
-.device-avatar {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--ion-color-primary);
-    color: white;
-    font-weight: bold;
-    border-radius: 50%;
-}
-
-.timestamp {
-    font-size: 0.7rem;
-    color: var(--ion-color-medium);
-}
-
+/* page-loading, empty-state, item-avatar, text-muted are in global.css */
 .load-more-container {
-    padding: 16px;
+  padding: 8px 16px 16px;
 }
 </style>

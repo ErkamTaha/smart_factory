@@ -1,9 +1,9 @@
 <template>
     <ion-page>
-        <ion-header>
-            <ion-toolbar>
+        <ion-header :translucent="true">
+            <ion-toolbar color="primary">
                 <ion-buttons slot="start">
-                    <ion-back-button default-href="/dashboard"></ion-back-button>
+                    <ion-back-button color="light" default-href="/dashboard"></ion-back-button>
                 </ion-buttons>
                 <ion-title>Settings</ion-title>
             </ion-toolbar>
@@ -13,7 +13,10 @@
             <!-- API Configuration -->
             <ion-card>
                 <ion-card-header>
-                    <ion-card-title>API Configuration</ion-card-title>
+                    <ion-card-title>
+                        <ion-icon :icon="serverOutline"></ion-icon>
+                        API Configuration
+                    </ion-card-title>
                 </ion-card-header>
                 <ion-card-content>
                     <ion-list>
@@ -45,7 +48,10 @@
             <!-- Connection Status -->
             <ion-card>
                 <ion-card-header>
-                    <ion-card-title>Connection Status</ion-card-title>
+                    <ion-card-title>
+                        <ion-icon :icon="wifiOutline"></ion-icon>
+                        Connection Status
+                    </ion-card-title>
                 </ion-card-header>
                 <ion-card-content>
                     <ion-list>
@@ -76,7 +82,10 @@
             <!-- Data Management -->
             <ion-card>
                 <ion-card-header>
-                    <ion-card-title>Data Management</ion-card-title>
+                    <ion-card-title>
+                        <ion-icon :icon="refreshOutline"></ion-icon>
+                        Data Management
+                    </ion-card-title>
                 </ion-card-header>
                 <ion-card-content>
                     <ion-list>
@@ -93,7 +102,7 @@
                             </ion-label>
                         </ion-item>
                     </ion-list>
-                    <div class="button-group">
+                    <div class="action-row">
                         <ion-button expand="block" @click="refreshAllData" :disabled="isLoading">
                             <ion-icon :icon="refreshOutline" slot="start"></ion-icon>
                             Refresh All Data
@@ -109,7 +118,10 @@
             <!-- App Information -->
             <ion-card>
                 <ion-card-header>
-                    <ion-card-title>App Information</ion-card-title>
+                    <ion-card-title>
+                        <ion-icon :icon="informationCircleOutline"></ion-icon>
+                        App Information
+                    </ion-card-title>
                 </ion-card-header>
                 <ion-card-content>
                     <ion-list>
@@ -157,7 +169,7 @@ import {
     IonAlert, IonToast
 } from '@ionic/vue';
 import {
-    serverOutline, wifiOutline, refreshOutline, trashOutline
+    serverOutline, wifiOutline, refreshOutline, trashOutline, informationCircleOutline
 } from 'ionicons/icons';
 import { useIotStore } from '@/stores/iot';
 import apiService from '@/services/api';
@@ -331,10 +343,8 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.button-group {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    margin-top: 16px;
+/* action-row layout is provided by global.css */
+.action-row {
+  flex-direction: column;
 }
 </style>

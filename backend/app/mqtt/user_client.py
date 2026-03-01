@@ -235,6 +235,24 @@ class UserMQTTClient:
             except Exception as e:
                 logger.error(f"Error sending to user {self.user_id}: {e}")
 
+    def _check_acl_permission(self, topic: str, action: str) -> bool:
+        """Check ACL permission for a topic and action.
+
+        EMQX broker enforces ACL at the broker level using per-user MQTT
+        credentials, so this layer allows all actions. Override this method
+        to add application-level ACL enforcement if needed.
+        """
+        return True
+
+    def _check_ss_limit(self, sensor_id: str, value, unit: str) -> Tuple[bool, Optional[str]]:
+        """Check whether a sensor value violates configured limits.
+
+        Returns (alert_triggered, alert_type). This synchronous stub always
+        returns no alert; the async publish() method handles full DB-backed
+        limit checking via _broadcast_system_alert when needed.
+        """
+        return False, None
+
     def connect(self):
         """Connect to MQTT broker"""
         try:
@@ -493,7 +511,8 @@ class UserMQTTClientManager:
         mqtt_password: Optional[str] = None,
     ) -> UserMQTTClient:
         """
-        Create and connect MQTT client for a user
+        Create and connect MQTT client for a user.
+        Per-user mqtt_username/mqtt_password take priority over manager defaults.
         """
         # If user already has a client, disconnect it first
         if user_id in self.user_clients:
@@ -502,6 +521,10 @@ class UserMQTTClientManager:
 
         client_qos = qos if qos is not None else self.qos
 
+        # Use per-user credentials if provided, otherwise fall back to manager defaults
+        username = mqtt_username if mqtt_username is not None else self.username
+        password = mqtt_password if mqtt_password is not None else self.password
+
         # Create new client
         client = UserMQTTClient(
             user_id=user_id,
@@ -509,8 +532,8 @@ class UserMQTTClientManager:
             broker_port=self.broker_port,
             websocket=websocket,
             main_loop=self.main_loop,
-            username=self.username,
-            password=self.password,
+            username=username,
+            password=password,
             qos=client_qos,
             tls_enabled=self.tls_enabled,
             ca_certs=self.ca_certs,

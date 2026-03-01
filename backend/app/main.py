@@ -108,6 +108,7 @@ async def lifespan(app: FastAPI):
         logger.error(f"❌ Failed to initialize per-user MQTT manager: {e}")
 
     # Initialize EMQX Auth Manager
+    emqx_auth = None
     try:
         logger.info("🔐 Initializing EMQX Auth Manager...")
         emqx_auth = init_emqx_auth_manager(
@@ -119,7 +120,7 @@ async def lifespan(app: FastAPI):
         logger.error(f"❌ Failed to initialize EMQX Auth manager: {e}")
 
     # Verify EMQX connection
-    if await emqx_auth.verify_connection():
+    if emqx_auth and await emqx_auth.verify_connection():
         logger.info("✅ EMQX API connected successfully")
     else:
         logger.warning("⚠️  EMQX API connection failed - MQTT auth may not work")
