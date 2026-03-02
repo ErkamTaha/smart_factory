@@ -2,6 +2,7 @@
 ACL (Access Control List) API routes with database integration
 """
 
+import asyncio
 import logging
 import traceback
 from fastapi import APIRouter, HTTPException, Depends
@@ -10,6 +11,7 @@ from app.database import get_db
 from app.managers.db_acl_manager import get_acl_manager
 from app.mqtt.user_client import get_user_mqtt_manager
 from app.schemas.acl_schemas import PermissionCheck, Permission, UserCreate, UserUpdate
+from app.security.auth_security import hash_password
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/acl", tags=["ACL Management"])
@@ -122,21 +124,16 @@ async def create_user(user: UserCreate, db: AsyncSession = Depends(get_db)):
         new_user = await acl.add_user(
             username=user.username,
             email=user.email,
-            hashed_password=user.hashed_password,
+            hashed_password=hash_password(user.password),
             roles=user.roles,
-            custom_permissions=user.custom_permissions,
+            custom_permissions=user.custom_permissions or [],
             db=db,
         )
-
-        # Commit the new user
         await db.commit()
-
-        # Refresh to get the latest state with relationships
-        await db.refresh(new_user)
-
+        user_info = await acl.get_user_info(user.username, db)
         return {
             "message": f"User {user.username} created successfully",
-            "user": await acl.get_user_info(user.username, db),
+            "user": user_info,
         }
     except ValueError as e:
         await db.rollback()
@@ -212,14 +209,14 @@ async def delete_user(username: str, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=503, detail="ACL manager not available")
 
     try:
-        # If user is connected, disconnect them
+        # Disconnect MQTT client in a thread so the sync call doesn't block the loop
         mqtt_manager = get_user_mqtt_manager()
         if mqtt_manager:
-            mqtt_manager.remove_user_client(username)
+            await asyncio.get_event_loop().run_in_executor(
+                None, mqtt_manager.remove_user_client, username
+            )
 
         await acl.remove_user(username, db)
-
-        # Commit the deletion
         await db.commit()
 
         return {"message": f"User {username} removed successfully"}

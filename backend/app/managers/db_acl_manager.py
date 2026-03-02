@@ -7,10 +7,10 @@ import logging
 from typing import Dict, List, Optional
 import fnmatch
 from datetime import datetime, timedelta, timezone
-from sqlalchemy import select
+from sqlalchemy import select, insert, text
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models.acl_models import ACLUser, ACLRole, ACLConfig, ACLAuditLog
+from app.models.acl_models import ACLUser, ACLRole, ACLUserRole, ACLConfig, ACLAuditLog
 from app.database import SessionLocal
 
 logger = logging.getLogger(__name__)
@@ -252,20 +252,20 @@ class DatabaseACLManager:
                 is_active=True,
             )
             db.add(user)
-            await db.flush()
+            await db.flush()  # INSERT user, assigns user.id
+            user_id = user.id
+            db.expunge(user)  # Detach from session to prevent lazy-load tracking
 
             for role_name in roles:
-                result = await db.execute(
-                    select(ACLRole).where(ACLRole.name == role_name)
+                await db.execute(
+                    text(
+                        "INSERT INTO acl_user_roles (user_id, role_id) "
+                        "SELECT :uid, id FROM acl_roles WHERE name = :rname"
+                    ),
+                    {"uid": user_id, "rname": role_name},
                 )
-                role = result.scalars().first()
-                if role:
-                    user.roles.append(role)
-                else:
-                    logger.warning(f"Role {role_name} does not exist")
 
-            await db.flush()
-            return user
+            return user  # Detached object; caller only needs it for the response
         except Exception as e:
             logger.error(f"Error adding user: {e}")
             raise
@@ -273,16 +273,14 @@ class DatabaseACLManager:
     async def remove_user(self, username: str, db: AsyncSession):
         """Remove user (soft delete)"""
         try:
+            # Raw SQL UPDATE avoids ORM relationship lazy-load in async context
             result = await db.execute(
-                select(ACLUser).where(ACLUser.username == username)
+                text("UPDATE acl_users SET is_active = false WHERE username = :username"),
+                {"username": username},
             )
-            user = result.scalars().first()
-            if user:
-                user.is_active = False
-                await db.flush()
-                self._user_cache.pop(username, None)
-            else:
+            if result.rowcount == 0:
                 logger.warning(f"User {username} not found")
+            self._user_cache.pop(username, None)
         except Exception as e:
             logger.error(f"Error removing user: {e}")
             raise
@@ -380,7 +378,7 @@ class DatabaseACLManager:
             total_roles = len(result.scalars().all())
 
             return {
-                "version": self._config_cache.get("version", "unknown"),
+                "version": self._config_cache.get("version", "1.0"),
                 "default_policy": getattr(self, "default_policy", "deny"),
                 "total_users": total_users,
                 "total_roles": total_roles,

@@ -649,7 +649,9 @@ class DatabaseSSManager:
         try:
             query = (
                 select(SSAlert)
-                .options(selectinload(SSAlert.sensor))
+                .options(
+                    selectinload(SSAlert.sensor).selectinload(SSSensor.sensor_type_obj)
+                )
                 .order_by(SSAlert.triggered_at.desc())
             )
             if limit != 0:

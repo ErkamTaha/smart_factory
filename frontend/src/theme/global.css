@@ -30,6 +30,7 @@ ion-card-title {
 /* ── Buttons ─────────────────────────────────────────────── */
 ion-button {
   --border-radius: 8px;
+  align-self: flex-start; /* prevent stretch inside flex/grid containers */
 }
 
 /* ── Segment controls ────────────────────────────────────── */
@@ -45,6 +46,18 @@ ion-segment-button {
   font-weight: 500;
   font-size: 13px;
   min-height: 36px;
+}
+
+/* Primary-coloured segment (add class="tab-segment" to ion-segment) */
+.tab-segment {
+  --background: rgba(var(--ion-color-primary-rgb), 0.10);
+}
+
+.tab-segment ion-segment-button {
+  --color: var(--ion-color-primary);
+  --color-checked: #ffffff;
+  --indicator-color: var(--ion-color-primary);
+  --background-checked: var(--ion-color-primary);
 }
 
 /* ── Shared stat-item (used in ACL / SS / Dashboard) ─────── */
@@ -169,7 +182,7 @@ ion-segment-button {
 }
 
 .action-row ion-button {
-  flex: 1;
+  flex: 0 0 auto;
 }
 
 /* ── Toolbar on primary – light icon buttons ─────────────── */
@@ -183,3 +196,25 @@ ion-toolbar[color="primary"] ion-button[fill="clear"] {
   background: var(--ion-color-light-shade);
   margin: 12px 0;
 }
+
+/* ── Ionic toast – dark pill style (matches Dashboard toasts) ── */
+.app-toast {
+  --background: rgba(22, 22, 26, 0.90);
+  --color: rgba(255, 255, 255, 0.95);
+  --border-radius: 40px;
+  --box-shadow: 0 4px 28px rgba(0,0,0,0.30);
+  --min-width: 0;
+  --max-width: 360px;
+  --start: auto;
+  --end: auto;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  font-size: 13.5px;
+  font-weight: 500;
+  --button-color: rgba(255,255,255,0.45);
+}
+
+.app-toast-primary { --color: rgba(255,255,255,0.95); }
+.app-toast-success { --color: rgba(255,255,255,0.95); }
+.app-toast-warning { --color: rgba(255,255,255,0.95); }
+.app-toast-danger  { --color: rgba(255,255,255,0.95); }

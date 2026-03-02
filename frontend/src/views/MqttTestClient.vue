@@ -47,13 +47,13 @@
                             </ion-row>
                             <ion-row>
                                 <ion-col size="6">
-                                    <ion-button expand="block" @click="connect" :disabled="isConnected">
+                                    <ion-button @click="connect" :disabled="isConnected">
                                         <ion-icon :icon="powerOutline" slot="start"></ion-icon>
                                         Connect
                                     </ion-button>
                                 </ion-col>
                                 <ion-col size="6">
-                                    <ion-button expand="block" color="danger" @click="disconnect"
+                                    <ion-button color="danger" @click="disconnect"
                                         :disabled="!isConnected">
                                         <ion-icon :icon="closeCircleOutline" slot="start"></ion-icon>
                                         Disconnect
@@ -91,7 +91,7 @@
                                         </ion-select>
                                     </ion-item>
 
-                                    <ion-button expand="block" @click="subscribe" :disabled="!isConnected"
+                                    <ion-button @click="subscribe" :disabled="!isConnected"
                                         class="ion-margin-top">
                                         <ion-icon :icon="addCircleOutline" slot="start"></ion-icon>
                                         Subscribe
@@ -153,7 +153,7 @@
                                         </ion-row>
                                     </ion-grid>
 
-                                    <ion-button expand="block" @click="publish" :disabled="!isConnected"
+                                    <ion-button @click="publish" :disabled="!isConnected"
                                         class="ion-margin-top">
                                         <ion-icon :icon="sendOutline" slot="start"></ion-icon>
                                         Publish
@@ -176,25 +176,25 @@
                         <ion-grid>
                             <ion-row>
                                 <ion-col size="6" size-md="3">
-                                    <ion-button expand="block" fill="outline" @click="subscribeToUserStatuses"
+                                    <ion-button fill="outline" @click="subscribeToUserStatuses"
                                         :disabled="!isConnected">
                                         User Statuses
                                     </ion-button>
                                 </ion-col>
                                 <ion-col size="6" size-md="3">
-                                    <ion-button expand="block" fill="outline" @click="subscribeToSensors"
+                                    <ion-button fill="outline" @click="subscribeToSensors"
                                         :disabled="!isConnected">
                                         All Sensors
                                     </ion-button>
                                 </ion-col>
                                 <ion-col size="6" size-md="3">
-                                    <ion-button expand="block" fill="outline" @click="subscribeToBackendStatus"
+                                    <ion-button fill="outline" @click="subscribeToBackendStatus"
                                         :disabled="!isConnected">
                                         Backend Status
                                     </ion-button>
                                 </ion-col>
                                 <ion-col size="6" size-md="3">
-                                    <ion-button expand="block" fill="outline" @click="publishTestSensorData"
+                                    <ion-button fill="outline" @click="publishTestSensorData"
                                         :disabled="!isConnected">
                                         Test Publish
                                     </ion-button>
@@ -309,7 +309,7 @@
                             </ion-select>
                         </ion-item>
 
-                        <ion-button expand="block" @click="createUser" class="ion-margin-top">
+                        <ion-button @click="createUser" class="ion-margin-top">
                             <ion-icon :icon="personAddOutline" slot="start"></ion-icon>
                             Create User
                         </ion-button>
@@ -400,7 +400,7 @@
                             </ion-select>
                         </ion-item>
 
-                        <ion-button expand="block" @click="checkPermission" class="ion-margin-top">
+                        <ion-button @click="checkPermission" class="ion-margin-top">
                             <ion-icon :icon="checkmarkCircleOutline" slot="start"></ion-icon>
                             Check Permission
                         </ion-button>

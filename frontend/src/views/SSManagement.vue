@@ -156,7 +156,7 @@
                         <div v-if="addError" class="inline-error">
                             {{ addError }}
                         </div>
-                        <ion-button expand="block" @click="createSensor" :disabled="!isValidNewSensor"
+                        <ion-button @click="createSensor" :disabled="!isValidNewSensor"
                             class="ion-margin-top">
                             <ion-icon :icon="addCircleOutline" slot="start"></ion-icon>
                             Add Sensor
@@ -248,7 +248,7 @@
                             </ion-row>
                         </ion-grid>
 
-                        <ion-button expand="block" @click="testSensorAlert" :disabled="!isValidAlertTest"
+                        <ion-button @click="testSensorAlert" :disabled="!isValidAlertTest"
                             class="ion-margin-top">
                             <ion-icon :icon="warningOutline" slot="start"></ion-icon>
                             Test Alert
@@ -476,7 +476,7 @@
                         {{ updateError }}
                     </div>
 
-                    <ion-button expand="block" @click="updateSensor" class="ion-margin-top">
+                    <ion-button @click="updateSensor" class="ion-margin-top">
                         <ion-icon :icon="saveOutline" slot="start"></ion-icon>
                         Update Sensor
                     </ion-button>
@@ -1067,7 +1067,7 @@ const resolveAlert = async (alert) => {
     try {
         if (alert.is_resolved) return;
         const response = await apiService.resolveAlert(alert.id);
-        if (response.data = true) {
+        if (response.data) {
             loadSensors();
             loadAlerts();
         }
@@ -1080,7 +1080,7 @@ const revertAlert = async (alert) => {
     try {
         if (!alert.is_resolved) return;
         const response = await apiService.revertAlert(alert.id);
-        if (response.data = true) {
+        if (response.data) {
             loadSensors();
             loadAlerts();
         }

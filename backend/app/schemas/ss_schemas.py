@@ -4,8 +4,9 @@ from typing import List, Optional, Dict, Any
 
 class AlertCheck(BaseModel):
     sensor_id: str
-    value: str
+    value: float
     unit: str
+    mqtt_topic: Optional[str] = None
 
 
 class SensorLimit(BaseModel):

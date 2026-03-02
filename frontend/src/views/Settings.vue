@@ -39,7 +39,7 @@
                             </ion-select>
                         </ion-item>
                     </ion-list>
-                    <ion-button expand="block" @click="saveApiSettings">
+                    <ion-button @click="saveApiSettings">
                         Save API Settings
                     </ion-button>
                 </ion-card-content>
@@ -73,7 +73,7 @@
                             </ion-label>
                         </ion-item>
                     </ion-list>
-                    <ion-button expand="block" fill="outline" @click="testConnection">
+                    <ion-button fill="outline" @click="testConnection">
                         Test Connection
                     </ion-button>
                 </ion-card-content>
@@ -103,11 +103,11 @@
                         </ion-item>
                     </ion-list>
                     <div class="action-row">
-                        <ion-button expand="block" @click="refreshAllData" :disabled="isLoading">
+                        <ion-button @click="refreshAllData" :disabled="isLoading">
                             <ion-icon :icon="refreshOutline" slot="start"></ion-icon>
                             Refresh All Data
                         </ion-button>
-                        <ion-button expand="block" fill="outline" color="warning" @click="showClearDataAlert">
+                        <ion-button fill="outline" color="warning" @click="showClearDataAlert">
                             <ion-icon :icon="trashOutline" slot="start"></ion-icon>
                             Clear Local Data
                         </ion-button>

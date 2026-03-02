@@ -2,7 +2,19 @@
     <ion-page>
         <ion-header :translucent="true">
             <ion-toolbar color="primary">
-                <ion-title>Smart Factory Dashboard</ion-title>
+                <ion-buttons slot="start">
+                    <ion-icon :icon="businessOutline" class="toolbar-logo"></ion-icon>
+                </ion-buttons>
+                <ion-title>Smart Factory</ion-title>
+                <!-- Toolbar inline stats -->
+                <div class="toolbar-stats" slot="end">
+                    <span class="toolbar-stat" title="Connected Users">
+                        <ion-icon :icon="peopleOutline"></ion-icon>{{ activeUsers.length }}
+                    </span>
+                    <span class="toolbar-stat" :class="{ 'toolbar-stat-alert': systemAlerts.length > 0 }" title="Alerts">
+                        <ion-icon :icon="alertCircleOutline"></ion-icon>{{ systemAlerts.length }}
+                    </span>
+                </div>
                 <ion-buttons slot="end">
                     <ion-button color="light" title="Refresh data" @click="refreshData" :disabled="isRefreshing || !isConnected">
                         <ion-icon :icon="refreshOutline" slot="icon-only"></ion-icon>
@@ -14,10 +26,10 @@
                         <ion-icon :icon="logOutOutline" slot="icon-only"></ion-icon>
                     </ion-button>
                     <!-- Connection Status -->
-                    <ion-chip :color="connectionStatusColor" class="connection-status" @click="toggleConnection">
+                    <span class="connection-chip" :class="`connection-chip-${connectionStatus.toLowerCase()}`" @click="toggleConnection">
                         <ion-icon :icon="connectionStatusIcon"></ion-icon>
-                        <ion-label>{{ connectionStatus }}</ion-label>
-                    </ion-chip>
+                        {{ connectionStatus }}
+                    </span>
                 </ion-buttons>
             </ion-toolbar>
         </ion-header>
@@ -51,249 +63,167 @@
             </div>
 
             <!-- Main Dashboard Content -->
-            <div v-else>
-                <!-- Overview Statistics -->
-                <div class="stats-section">
-                    <ion-grid>
-                        <ion-row>
-                            <ion-col size="6" size-md="3">
-                                <ion-card class="stat-card">
-                                    <ion-card-content>
-                                        <div class="stat-content">
-                                            <ion-icon :icon="hardwareChipOutline" class="stat-icon"
-                                                color="primary"></ion-icon>
-                                            <div class="stat-info">
-                                                <h2>{{ deviceCount }}</h2>
-                                                <p>Active Devices</p>
-                                            </div>
-                                        </div>
-                                    </ion-card-content>
-                                </ion-card>
-                            </ion-col>
+            <div v-else class="dashboard-content">
+                <!-- Device Strip (horizontal scroll) -->
+                <ion-card v-if="deviceSummaries.length > 0" class="device-strip-card">
+                    <ion-card-header>
+                        <ion-card-title>
+                            <ion-icon :icon="hardwareChipOutline"></ion-icon>
+                            Devices
+                            <ion-chip color="primary" size="small" class="reading-count-badge">
+                                {{ deviceSummaries.length }}
+                            </ion-chip>
+                        </ion-card-title>
+                    </ion-card-header>
+                    <ion-card-content>
+                        <div class="device-scroll">
+                            <div v-for="dev in deviceSummaries" :key="dev.id"
+                                class="device-card" @click="viewDeviceDetails(dev.id)">
+                                <div class="device-avatar" :style="getDeviceAvatarStyle(dev.types)">
+                                    <ion-icon :icon="getDeviceIcon(dev.types)"></ion-icon>
+                                </div>
+                                <div class="device-info">
+                                    <div class="device-name">{{ dev.id }}</div>
+                                    <div class="device-types">
+                                        <span v-for="t in dev.types" :key="t" class="device-type-badge" :style="getSensorPillStyle(t)">{{ t }}</span>
+                                    </div>
+                                </div>
+                                <div class="device-age">{{ formatRelativeTime(dev.lastTs) }}</div>
+                            </div>
+                        </div>
+                    </ion-card-content>
+                </ion-card>
 
-                            <ion-col size="6" size-md="3">
-                                <ion-card class="stat-card">
-                                    <ion-card-content>
-                                        <div class="stat-content">
-                                            <ion-icon :icon="peopleOutline" class="stat-icon"
-                                                color="success"></ion-icon>
-                                            <div class="stat-info">
-                                                <h2>{{ activeUsers.length }}</h2>
-                                                <p>Connected Users</p>
-                                            </div>
-                                        </div>
-                                    </ion-card-content>
-                                </ion-card>
-                            </ion-col>
-
-                            <ion-col size="6" size-md="3">
-                                <ion-card class="stat-card">
-                                    <ion-card-content>
-                                        <div class="stat-content">
-                                            <ion-icon :icon="barChartOutline" class="stat-icon"
-                                                color="warning"></ion-icon>
-                                            <div class="stat-info">
-                                                <h2>{{ totalSensorReadings }}</h2>
-                                                <p>Sensor Readings</p>
-                                            </div>
-                                        </div>
-                                    </ion-card-content>
-                                </ion-card>
-                            </ion-col>
-
-                            <ion-col size="6" size-md="3">
-                                <ion-card class="stat-card">
-                                    <ion-card-content>
-                                        <div class="stat-content">
-                                            <ion-icon :icon="shieldCheckmarkOutline" class="stat-icon"
-                                                color="tertiary"></ion-icon>
-                                            <div class="stat-info">
-                                                <h2>{{ systemAlerts.length }}</h2>
-                                                <p>System Alerts</p>
-                                            </div>
-                                        </div>
-                                    </ion-card-content>
-                                </ion-card>
-                            </ion-col>
-                        </ion-row>
-                    </ion-grid>
-                </div>
-
-                <!-- Real-time Sensor Data -->
-                <ion-card v-if="latestSensorData.length > 0">
+                <!-- Latest Sensor Readings (horizontal scroll) -->
+                <ion-card v-if="latestSensorData.length > 0" class="sensor-scroll-card">
                     <ion-card-header>
                         <ion-card-title>
                             <ion-icon :icon="thermometerOutline"></ion-icon>
-                            Latest Sensor Readings
+                            Latest Readings
+                            <ion-chip color="primary" size="small" class="reading-count-badge">
+                                {{ latestSensorData.length }}
+                            </ion-chip>
+                            <ion-button fill="clear" size="small" class="view-all-btn" @click="router.push('/readings')">
+                                View All
+                                <ion-icon :icon="chevronForwardOutline" slot="end"></ion-icon>
+                            </ion-button>
                         </ion-card-title>
                     </ion-card-header>
                     <ion-card-content>
-                        <div class="sensor-grid">
-                            <div v-for="reading in latestSensorData.slice(0, 8)" :key="reading.id" class="sensor-item">
-                                <div class="sensor-header">
-                                    <span class="device-id">{{ reading.device_id }}</span>
-                                    <ion-chip :color="getSensorStatusColor(reading)" size="small">
-                                        {{ reading.sensor_type }}
-                                    </ion-chip>
+                        <div class="sensor-scroll">
+                            <div v-for="reading in latestSensorData.slice(0, 8)" :key="reading.id"
+                                class="sensor-card">
+                                <div class="sensor-card-top">
+                                    <div class="sensor-type-pill" :style="getSensorPillStyle(reading.sensor_type)">
+                                        <ion-icon :icon="getSensorIcon(reading.sensor_type)"></ion-icon>
+                                        <span>{{ reading.sensor_type }}</span>
+                                    </div>
+                                    <span class="sensor-age">{{ formatRelativeTime(reading.timestamp) }}</span>
                                 </div>
-                                <div class="sensor-value">
-                                    {{ reading.value }} <small>{{ reading.unit }}</small>
+                                <div class="sensor-card-value">
+                                    {{ reading.value !== undefined && reading.value !== null ? reading.value : '—' }}
+                                    <span class="sensor-unit">{{ reading.unit }}</span>
                                 </div>
-                                <div class="sensor-time">{{ formatRelativeTime(reading.timestamp) }}</div>
+                                <div class="sensor-card-bottom">
+                                    <ion-icon :icon="hardwareChipOutline" class="device-icon"></ion-icon>
+                                    <span class="sensor-device">{{ reading.device_id }}</span>
+                                </div>
                             </div>
                         </div>
-                        <ion-button fill="outline" expand="block" @click="openSensorDetails" class="ion-margin-top">
-                            View All Sensor Data
-                        </ion-button>
                     </ion-card-content>
                 </ion-card>
 
-                <!-- Active MQTT Sessions -->
-                <ion-card>
-                    <ion-card-header>
-                        <ion-card-title>
-                            <ion-icon :icon="globeOutline"></ion-icon>
-                            Active MQTT Sessions
-                        </ion-card-title>
-                    </ion-card-header>
-                    <ion-card-content>
-                        <ion-list v-if="activeUsers.length > 0">
-                            <ion-item v-for="user in activeUsers" :key="user.user_id">
-                                <div slot="start" class="item-avatar">{{ user.user_id.charAt(0).toUpperCase() }}</div>
-                                <ion-label>
-                                    <h3>{{ user.user_id }}</h3>
-                                    <p>{{ user.subscribed_topics.length }} subscriptions | QoS {{ user.qos }}</p>
-                                    <p class="user-status">
-                                        <ion-chip :color="user.is_connected ? 'success' : 'danger'" size="small">
-                                            {{ user.is_connected ? 'Connected' : 'Disconnected' }}
-                                        </ion-chip>
-                                    </p>
-                                </ion-label>
-                                <ion-button slot="end" fill="clear" @click="viewUserDetails(user)">
-                                    <ion-icon :icon="informationCircleOutline"></ion-icon>
+                <!-- Security & Sessions side by side -->
+                <div class="cards-row">
+                    <!-- Security & Access Control -->
+                    <ion-card class="half-card">
+                        <ion-card-header>
+                            <ion-card-title>
+                                <ion-icon :icon="lockClosedOutline"></ion-icon>
+                                Security
+                            </ion-card-title>
+                        </ion-card-header>
+                        <ion-card-content>
+                            <div class="security-item">
+                                <h4>
+                                    <ion-icon :icon="peopleOutline"></ion-icon>
+                                    ACL
+                                </h4>
+                                <p v-if="aclInfo">{{ aclInfo.total_users }} users / {{ aclInfo.total_roles }} roles</p>
+                                <ion-chip :color="aclInfo ? 'success' : 'danger'" size="small">
+                                    {{ aclInfo ? 'Active' : 'Inactive' }}
+                                </ion-chip>
+                                <ion-button fill="outline" size="small" @click="openACLManagement" class="security-btn">
+                                    Manage
                                 </ion-button>
-                            </ion-item>
-                        </ion-list>
-                        <div v-else class="empty-state">
-                            <ion-icon :icon="cloudOfflineOutline" size="large" color="medium"></ion-icon>
-                            <p>No active MQTT sessions</p>
-                        </div>
-                    </ion-card-content>
-                </ion-card>
+                            </div>
+                            <div class="card-divider"></div>
+                            <div class="security-item">
+                                <h4>
+                                    <ion-icon :icon="shieldCheckmarkOutline"></ion-icon>
+                                    Sensor SS
+                                </h4>
+                                <p v-if="ssInfo">{{ ssInfo.total_sensors }} sensors</p>
+                                <ion-chip :color="ssInfo ? 'success' : 'danger'" size="small">
+                                    {{ ssInfo ? 'Active' : 'Inactive' }}
+                                </ion-chip>
+                                <ion-button fill="outline" size="small" @click="openSSManagement" class="security-btn">
+                                    Manage
+                                </ion-button>
+                            </div>
+                        </ion-card-content>
+                    </ion-card>
 
-                <!-- Device Management -->
-                <ion-card v-if="devices.length > 0">
-                    <ion-card-header>
-                        <ion-card-title>
-                            <ion-icon :icon="layersOutline"></ion-icon>
-                            Device Overview
-                        </ion-card-title>
-                    </ion-card-header>
-                    <ion-card-content>
-                        <ion-grid>
-                            <ion-row>
-                                <ion-col size="12" size-md="6" v-for="device in devices.slice(0, 6)" :key="device">
-                                    <div class="device-card">
-                                        <div class="device-header">
-                                            <h4>{{ device }}</h4>
-                                            <ion-chip color="primary" size="small">
-                                                {{ getDeviceReadingCount(device) }} readings
-                                            </ion-chip>
-                                        </div>
-                                        <div class="device-sensors">
-                                            <ion-chip v-for="sensor in getDeviceSensorTypes(device)" :key="sensor"
-                                                color="tertiary" size="small">
-                                                {{ sensor }}
-                                            </ion-chip>
-                                        </div>
-                                        <ion-button fill="outline" size="small" @click="viewDeviceDetails(device)">
-                                            View Details
-                                        </ion-button>
-                                    </div>
-                                </ion-col>
-                            </ion-row>
-                        </ion-grid>
-                    </ion-card-content>
-                </ion-card>
-
-                <!-- Security & Access Control -->
-                <ion-card>
-                    <ion-card-header>
-                        <ion-card-title>
-                            <ion-icon :icon="lockClosedOutline"></ion-icon>
-                            Security Status
-                        </ion-card-title>
-                    </ion-card-header>
-                    <ion-card-content>
-                        <ion-grid>
-                            <ion-row>
-                                <ion-col size="6">
-                                    <div class="security-item">
-                                        <h4>ACL Status</h4>
-                                        <p v-if="aclInfo">
-                                            {{ aclInfo.total_users }} users, {{ aclInfo.total_roles }} roles
-                                        </p>
-                                        <ion-chip :color="aclInfo ? 'success' : 'danger'" size="small">
-                                            {{ aclInfo ? 'Active' : 'Inactive' }}
-                                        </ion-chip>
-                                    </div>
-                                </ion-col>
-                                <ion-col size="6">
-                                    <div class="security-item">
-                                        <h4>Sensor Security</h4>
-                                        <p v-if="ssInfo">
-                                            {{ ssInfo.total_sensors }} active sensors
-                                        </p>
-                                        <ion-chip :color="ssInfo ? 'success' : 'danger'" size="small">
-                                            {{ ssInfo ? 'Active' : 'Inactive' }}
-                                        </ion-chip>
-                                    </div>
-                                </ion-col>
-                            </ion-row>
-                        </ion-grid>
-                        <div class="security-actions">
-                            <ion-button fill="outline" @click="openACLManagement">
-                                <ion-icon :icon="peopleOutline" slot="start"></ion-icon>
-                                Manage ACL
-                            </ion-button>
-                            <ion-button fill="outline" @click="openSSManagement">
-                                <ion-icon :icon="shieldCheckmarkOutline" slot="start"></ion-icon>
-                                Sensor Security
-                            </ion-button>
-                        </div>
-                    </ion-card-content>
-                </ion-card>
-
-                <!-- Quick Actions -->
-                <ion-card>
-                    <ion-card-header>
-                        <ion-card-title>
-                            <ion-icon :icon="flashOutline"></ion-icon>
-                            Quick Actions
-                        </ion-card-title>
-                    </ion-card-header>
-                    <ion-card-content>
-                        <div class="action-grid">
-                            <ion-button expand="block" @click="showPublishModal = true">
-                                <ion-icon :icon="addCircleOutline" slot="start"></ion-icon>
-                                Publish Data
-                            </ion-button>
-                            <ion-button expand="block" fill="outline" @click="showCommandModal = true">
-                                <ion-icon :icon="sendOutline" slot="start"></ion-icon>
-                                Send Command
-                            </ion-button>
-                            <ion-button expand="block" fill="outline" @click="openMQTTTest">
-                                <ion-icon :icon="terminalOutline" slot="start"></ion-icon>
-                                MQTT Test
-                            </ion-button>
-                            <ion-button expand="block" fill="outline" @click="reloadConfigurations">
-                                <ion-icon :icon="refreshOutline" slot="start"></ion-icon>
-                                Reload Config
-                            </ion-button>
-                        </div>
-                    </ion-card-content>
-                </ion-card>
+                    <!-- Active MQTT Sessions -->
+                    <ion-card class="half-card">
+                        <ion-card-header>
+                            <ion-card-title>
+                                <ion-icon :icon="globeOutline"></ion-icon>
+                                Sessions
+                            </ion-card-title>
+                        </ion-card-header>
+                        <ion-card-content class="sessions-content">
+                            <ion-list v-if="activeUsers.length > 0" lines="none">
+                                <ion-item v-for="user in activeUsers.slice(0, 2)" :key="user.user_id" class="session-item">
+                                    <div slot="start" class="item-avatar item-avatar-sm">{{ user.user_id.charAt(0).toUpperCase() }}</div>
+                                    <ion-label>
+                                        <h3>{{ user.user_id }}</h3>
+                                        <p>{{ user.subscribed_topics.length }} topics</p>
+                                    </ion-label>
+                                    <ion-chip slot="end" :color="user.is_connected ? 'success' : 'danger'" size="small">
+                                        {{ user.is_connected ? 'On' : 'Off' }}
+                                    </ion-chip>
+                                </ion-item>
+                            </ion-list>
+                            <div v-else class="empty-state-sm">
+                                <ion-icon :icon="cloudOfflineOutline" color="medium"></ion-icon>
+                                <p>No active sessions</p>
+                            </div>
+                        </ion-card-content>
+                    </ion-card>
+                </div>
             </div>
+
+            <!-- Quick Actions FAB -->
+            <ion-fab slot="fixed" vertical="bottom" horizontal="end">
+                <ion-fab-button color="primary">
+                    <ion-icon :icon="flashOutline"></ion-icon>
+                </ion-fab-button>
+                <ion-fab-list side="top">
+                    <ion-fab-button @click="reloadConfigurations" color="medium" title="Reload Config">
+                        <ion-icon :icon="refreshOutline"></ion-icon>
+                    </ion-fab-button>
+                    <ion-fab-button @click="openMQTTTest" color="tertiary" title="MQTT Test">
+                        <ion-icon :icon="terminalOutline"></ion-icon>
+                    </ion-fab-button>
+                    <ion-fab-button @click="showCommandModal = true" color="secondary" title="Send Command">
+                        <ion-icon :icon="sendOutline"></ion-icon>
+                    </ion-fab-button>
+                    <ion-fab-button @click="showPublishModal = true" color="primary" title="Publish Data">
+                        <ion-icon :icon="addCircleOutline"></ion-icon>
+                    </ion-fab-button>
+                </ion-fab-list>
+            </ion-fab>
 
             <!-- Publish Data Modal -->
             <ion-modal :is-open="showPublishModal" @will-dismiss="showPublishModal = false">
@@ -326,7 +256,7 @@
                                 label-placement="stacked"></ion-input>
                         </ion-item>
                     </ion-list>
-                    <ion-button expand="block" @click="publishSensorData" :disabled="!isValidPublishData"
+                    <ion-button @click="publishSensorData" :disabled="!isValidPublishData"
                         class="ion-margin-top">
                         <ion-icon :icon="sendOutline" slot="start"></ion-icon>
                         Publish Data
@@ -365,7 +295,7 @@
                                 placeholder='{"param1": "value1"}' label-placement="stacked" :rows="3"></ion-textarea>
                         </ion-item>
                     </ion-list>
-                    <ion-button expand="block" @click="sendDeviceCommand" :disabled="!isValidCommandData"
+                    <ion-button @click="sendDeviceCommand" :disabled="!isValidCommandData"
                         class="ion-margin-top">
                         <ion-icon :icon="sendOutline" slot="start"></ion-icon>
                         Send Command
@@ -405,7 +335,7 @@
                             </ion-range>
                         </ion-item>
                     </ion-list>
-                    <ion-button expand="block" @click="saveSettings" class="ion-margin-top">
+                    <ion-button @click="saveSettings" class="ion-margin-top">
                         <ion-icon :icon="saveOutline" slot="start"></ion-icon>
                         Save Settings
                     </ion-button>
@@ -419,12 +349,13 @@
             <transition-group name="toast" tag="div" class="toast-stack">
                 <div v-for="toast in toasts" :key="toast.id"
                     class="custom-toast" :class="`toast-${toast.color}`">
-                    <ion-icon :icon="toast.icon" class="toast-icon"></ion-icon>
+                    <div class="toast-icon-wrap">
+                        <ion-icon :icon="toast.icon" class="toast-icon"></ion-icon>
+                    </div>
                     <span class="toast-message">{{ toast.message }}</span>
-                    <ion-button fill="clear" size="small" class="toast-close"
-                        @click="removeToast(toast.id)">
-                        <ion-icon :icon="closeOutline" slot="icon-only"></ion-icon>
-                    </ion-button>
+                    <button class="toast-close" @click="removeToast(toast.id)" aria-label="Dismiss">
+                        <ion-icon :icon="closeOutline"></ion-icon>
+                    </button>
                 </div>
             </transition-group>
         </div>
@@ -439,6 +370,7 @@ import {
     IonIcon, IonCard, IonCardContent, IonCardHeader, IonCardTitle, IonList,
     IonItem, IonLabel, IonChip, IonSpinner, IonAvatar, IonModal, IonGrid, IonRow, IonCol,
     IonInput, IonTextarea, IonSelect, IonSelectOption, IonToggle, IonRange,
+    IonFab, IonFabButton, IonFabList,
     alertController
 } from '@ionic/vue';
 import {
@@ -448,7 +380,8 @@ import {
     layersOutline, lockClosedOutline, flashOutline, addCircleOutline, sendOutline,
     terminalOutline, closeOutline, saveOutline, warningOutline,
     alertCircleOutline, checkmarkCircle, closeCircle, wifi,
-    globeOutline, logOutOutline
+    globeOutline, logOutOutline, chevronForwardOutline,
+    waterOutline, speedometerOutline, moveOutline, businessOutline
 } from 'ionicons/icons';
 
 import webSocketService from '@/services/websocket';
@@ -534,6 +467,22 @@ const connectionStatusIcon = computed(() => {
 const deviceCount = computed(() => devices.value.length);
 const totalSensorReadings = computed(() => latestSensorData.value.length);
 const recentAlerts = computed(() => systemAlerts.value.slice(0, 3));
+
+// Per-device summary derived from latestSensorData
+const deviceSummaries = computed(() => {
+    const map = new Map();
+    latestSensorData.value.forEach(r => {
+        if (!r.device_id || r.device_id === 'unknown') return;
+        if (!map.has(r.device_id)) {
+            map.set(r.device_id, { id: r.device_id, count: 0, types: new Set(), lastTs: null });
+        }
+        const d = map.get(r.device_id);
+        d.count++;
+        if (r.sensor_type && r.sensor_type !== 'unknown') d.types.add(r.sensor_type);
+        if (!d.lastTs || r.timestamp > d.lastTs) d.lastTs = r.timestamp;
+    });
+    return Array.from(map.values()).map(d => ({ ...d, types: Array.from(d.types) }));
+});
 
 const isValidPublishData = computed(() => {
     return publishData.value.device_id &&
@@ -631,25 +580,32 @@ const handleSystemAlert = (data) => {
 };
 
 const handleSensorData = (data) => {
-    // Extract device_id and sensor_type from topic (sf/sensors/DEVICE_ID/SENSOR_TYPE)
-    // as a fallback when the payload doesn't include them
+    // Extract device_id (string) and sensor_type from topic: sf/sensors/DEVICE_ID/SENSOR_TYPE
     let topicDeviceId = null;
     let topicSensorType = null;
     if (data.topic) {
         const parts = data.topic.split('/');
         if (parts.length >= 3 && parts[0] === 'sf' && parts[1] === 'sensors') {
-            topicDeviceId = parts[2] || null;
-            topicSensorType = parts[3] || null;
+            topicDeviceId = parts[2] || null;       // string device identifier
+            topicSensorType = parts[3] || null;     // e.g. 'temperature'
         }
     }
 
+    const payload = data.data || {};
+    // Prefer string topic device_id over payload.device_id (which may be an integer FK)
+    const deviceId = topicDeviceId || (payload.device_id ? String(payload.device_id) : null) || 'unknown';
+    const sensorType = payload.sensor_type || topicSensorType || 'unknown';
+
+    // Drop the reading entirely if we have no useful identifiers
+    if (deviceId === 'unknown' || sensorType === 'unknown') return;
+
     const sensorReading = {
         id: Date.now() + Math.random(),
-        device_id: data.data?.device_id || topicDeviceId || 'unknown',
-        sensor_type: data.data?.sensor_type || topicSensorType || 'unknown',
-        value: data.data?.value,
-        unit: data.data?.unit || '',
-        timestamp: data.data?.timestamp || new Date().toISOString(),
+        device_id: deviceId,
+        sensor_type: sensorType,
+        value: payload.value,
+        unit: payload.unit || '',
+        timestamp: payload.timestamp || new Date().toISOString(),
         topic: data.topic,
         qos: data.qos,
         retain: data.retain
@@ -663,11 +619,9 @@ const handleSensorData = (data) => {
         latestSensorData.value = latestSensorData.value.slice(0, 50);
     }
 
-    // Auto-discover devices from sensor data
-    const deviceId = sensorReading.device_id;
-    if (deviceId !== 'unknown' && !devices.value.includes(deviceId)) {
-        devices.value.push(deviceId);
-        console.log(`Auto-discovered new device: ${deviceId}`);
+    // Auto-discover devices from sensor data (deviceId is always a valid string here)
+    if (!devices.value.includes(sensorReading.device_id)) {
+        devices.value.push(sensorReading.device_id);
     }
 };
 
@@ -765,6 +719,10 @@ const fetchInitialSensorData = async () => {
     try {
         const response = await apiService.getLatestReadings(20);
         const readings = response.data.readings || [];
+        // Drop any stale WebSocket-sourced entries that have unknown fields
+        latestSensorData.value = latestSensorData.value.filter(
+            s => s.sensor_type !== 'unknown' && s.device_id !== 'unknown'
+        );
         // Map REST API field names to the shape handleSensorData uses
         readings.forEach(r => {
             const reading = {
@@ -1013,6 +971,30 @@ const getDeviceReadingCount = (deviceId) => {
     return latestSensorData.value.filter(r => r.device_id === deviceId).length;
 };
 
+const SENSOR_META = {
+    temperature: { icon: thermometerOutline, bg: 'rgba(194, 68, 80, 0.12)',  fg: '#b84050' },
+    humidity:    { icon: waterOutline,        bg: 'rgba(56, 120, 220, 0.12)', fg: '#3472c0' },
+    pressure:    { icon: speedometerOutline,  bg: 'rgba(180, 140, 10, 0.13)', fg: '#9a7800' },
+    motion:      { icon: moveOutline,         bg: 'rgba(38, 180, 100, 0.12)', fg: '#28a060' },
+};
+const SENSOR_META_DEFAULT = { icon: hardwareChipOutline, bg: 'rgba(130, 130, 140, 0.12)', fg: '#7a7a8a' };
+
+const getSensorMeta = (type) => SENSOR_META[type] || SENSOR_META_DEFAULT;
+
+// Device strip helpers
+const getDeviceIcon = (types) => getSensorMeta(types[0]).icon;
+const getDeviceAvatarStyle = (types) => {
+    const m = getSensorMeta(types[0]);
+    return { background: m.bg, color: m.fg };
+};
+
+// Readings strip helpers
+const getSensorIcon = (type) => getSensorMeta(type).icon;
+const getSensorPillStyle = (type) => {
+    const m = getSensorMeta(type);
+    return { background: m.bg, color: m.fg };
+};
+
 const getDeviceSensorTypes = (deviceId) => {
     const types = new Set();
     latestSensorData.value
@@ -1116,11 +1098,32 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-/* ── Toolbar connection chip ─────────────────────────────── */
-.connection-status {
-  margin-right: 8px;
-  cursor: pointer;
+/* ── Toolbar logo ────────────────────────────────────────── */
+.toolbar-logo {
+  font-size: 22px;
+  color: rgba(255, 255, 255, 0.9);
+  margin-left: 4px;
 }
+
+/* ── Toolbar connection chip ─────────────────────────────── */
+.connection-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  border-radius: 20px;
+  padding: 3px 9px 3px 7px;
+  margin-right: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  border: 1.5px solid rgba(255, 255, 255, 0.4);
+}
+.connection-chip ion-icon { font-size: 13px; }
+.connection-chip-connected    { background: rgba(45, 211, 111, 0.30); }
+.connection-chip-connecting   { background: rgba(255, 196, 9, 0.30); }
+.connection-chip-disconnected { background: rgba(235, 68, 90, 0.60); }
 
 /* ── Alerts banner ───────────────────────────────────────── */
 .alerts-banner {
@@ -1163,87 +1166,321 @@ onUnmounted(() => {
   overflow-y: auto;
 }
 
-/* ── Stats row ───────────────────────────────────────────── */
-.stats-section {
-  padding: 8px 4px 0;
+/* ── Dashboard content: collapse Ionic card margins ─────── */
+.dashboard-content {
+  display: flex;
+  flex-direction: column;
+}
+.dashboard-content > ion-card {
+  margin: 6px 12px;
+}
+.dashboard-content > .cards-row {
+  margin: 4px 0 6px;
+}
+.dashboard-content > .cards-row .half-card {
+  margin: 0 8px;
+}
+.dashboard-content > .cards-row .half-card:first-child {
+  margin-right: 4px;
+}
+.dashboard-content > .cards-row .half-card:last-child {
+  margin-left: 4px;
 }
 
-.stat-card {
-  margin: 8px;
-}
-
-.stat-content {
+/* ── Toolbar inline stats ────────────────────────────────── */
+.toolbar-stats {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 4px 0;
+  gap: 4px;
+  padding: 0 4px;
 }
 
-.stat-icon {
-  font-size: 32px;
+.toolbar-stat {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 20px;
+  padding: 3px 8px;
+  white-space: nowrap;
+}
+
+.toolbar-stat ion-icon {
+  font-size: 14px;
+}
+
+.toolbar-stat-alert {
+  background: rgba(235, 68, 90, 0.85);
+  color: #fff;
+}
+
+/* ── Cards row (side by side) ────────────────────────────── */
+.cards-row {
+  display: flex;
+  gap: 0;
+  align-items: stretch;
+}
+
+.half-card {
+  flex: 1;
+  min-width: 0;
+}
+
+.half-card ion-card-header {
+  padding: 8px 12px 4px;
+}
+
+.half-card ion-card-title {
+  font-size: 14px;
+}
+
+.half-card ion-card-content {
+  padding: 4px 10px 8px;
+}
+
+/* ── Sessions list ───────────────────────────────────────── */
+.sessions-content {
+  padding-top: 0;
+}
+
+.session-item {
+  --padding-start: 0;
+  --inner-padding-end: 0;
+  --min-height: 36px;
+}
+
+.session-item ion-label h3 {
+  font-size: 12px;
+}
+
+.session-item ion-label p {
+  font-size: 11px;
+}
+
+.empty-state-sm {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 0;
+  color: var(--ion-color-medium);
+  font-size: 12px;
+}
+
+.item-avatar-sm {
+  width: 30px;
+  height: 30px;
+  font-size: 13px;
+}
+
+/* ── Device strip ────────────────────────────────────────── */
+.device-strip-card {
+  margin-bottom: 0;
+}
+
+.device-strip-card ion-card-header {
+  padding-bottom: 4px;
+}
+
+.device-strip-card ion-card-content {
+  padding-bottom: 10px;
+}
+
+.device-scroll {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  scrollbar-width: none;
+}
+.device-scroll::-webkit-scrollbar { display: none; }
+
+.device-card {
+  flex: 0 0 auto;
+  min-width: 170px;
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+.device-card:active { transform: scale(0.97); }
+
+.device-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
+  font-size: 17px;
 }
 
-.stat-info h2 {
-  margin: 0;
-  font-size: 28px;
-  font-weight: 700;
-  color: var(--ion-color-dark);
-  line-height: 1;
+.device-info {
+  flex: 1;
+  min-width: 0;
 }
 
-.stat-info p {
-  margin: 4px 0 0;
+.device-name {
   font-size: 11px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  color: var(--ion-color-dark);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.device-types {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-top: 3px;
+}
+
+.device-type-badge {
+  font-size: 9px;
+  font-weight: 600;
+  border-radius: 8px;
+  padding: 1px 5px;
+  text-transform: capitalize;
+}
+
+.device-age {
+  font-size: 9px;
   color: var(--ion-color-medium);
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
-/* ── Sensor grid ─────────────────────────────────────────── */
-.sensor-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+/* ── Sensor readings ─────────────────────────────────────── */
+.sensor-scroll-card {
+  margin-bottom: 0;
+}
+
+.sensor-scroll-card ion-card-header {
+  padding-bottom: 4px;
+}
+
+.sensor-scroll-card ion-card-content {
+  padding-bottom: 10px;
+}
+
+.reading-count-badge {
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.view-all-btn {
+  margin-left: auto;
+  --color: var(--ion-color-primary);
+  font-size: 13px;
+}
+
+.sensor-scroll {
+  display: flex;
   gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
 }
 
-.sensor-item {
-  background: var(--ion-color-light);
-  padding: 12px 14px;
-  border-radius: 10px;
-  border-left: 3px solid var(--ion-color-primary);
+.sensor-scroll::-webkit-scrollbar {
+  display: none;
 }
 
-.sensor-header {
+.sensor-card {
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 14px;
+  padding: 12px 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: box-shadow 0.15s ease;
+  flex: 0 0 150px;
+}
+
+.sensor-card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+.sensor-card-top {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 6px;
 }
 
-.device-id {
+.sensor-type-pill {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px 3px 6px;
+  border-radius: 20px;
+  font-size: 11px;
   font-weight: 600;
-  font-size: 13px;
-  color: var(--ion-color-dark);
+  text-transform: capitalize;
+  max-width: 70%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
-.sensor-value {
-  font-size: 22px;
+.sensor-type-pill ion-icon {
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.sensor-age {
+  font-size: 10px;
+  color: var(--ion-color-medium);
+  white-space: nowrap;
+}
+
+.sensor-card-value {
+  font-size: 26px;
   font-weight: 700;
-  margin-bottom: 2px;
   color: var(--ion-color-dark);
+  line-height: 1.1;
+  letter-spacing: -0.5px;
 }
 
-.sensor-value small {
-  font-size: 13px;
+.sensor-unit {
+  font-size: 14px;
   font-weight: 400;
   color: var(--ion-color-medium);
+  margin-left: 3px;
 }
 
-.sensor-time {
+.sensor-card-bottom {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding-top: 4px;
+  border-top: 1px solid var(--ion-color-light-shade);
+}
+
+.device-icon {
+  font-size: 12px;
+  color: var(--ion-color-medium);
+  flex-shrink: 0;
+}
+
+.sensor-device {
   font-size: 11px;
   color: var(--ion-color-medium);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 /* ── MQTT user list ──────────────────────────────────────── */
@@ -1251,90 +1488,53 @@ onUnmounted(() => {
   margin-top: 2px;
 }
 
-/* ── Device overview cards ───────────────────────────────── */
-.device-card {
-  background: var(--ion-color-light);
-  padding: 14px 16px;
-  border-radius: 10px;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.device-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.device-header h4 {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--ion-color-dark);
-}
-
-.device-sensors {
-  flex: 1;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
 /* ── Security status ─────────────────────────────────────── */
 .security-item {
   text-align: center;
-  padding: 12px 8px;
+  padding: 6px 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
 }
 
 .security-item h4 {
-  margin: 0 0 6px;
-  font-size: 14px;
+  margin: 0;
+  font-size: 13px;
   font-weight: 600;
   color: var(--ion-color-dark);
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .security-item p {
-  margin: 0 0 8px;
-  font-size: 12px;
+  margin: 0;
+  font-size: 11px;
   color: var(--ion-color-medium);
 }
 
-.security-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 16px;
-  flex-wrap: wrap;
+.security-btn {
+  margin-top: 2px;
+  align-self: center;
+  --padding-top: 4px;
+  --padding-bottom: 4px;
 }
 
-/* ── Quick actions grid ──────────────────────────────────── */
-.action-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 8px;
-}
-
-@media (max-width: 576px) {
-  .sensor-grid,
-  .action-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .security-actions {
-    flex-direction: column;
-  }
+/* ── FAB labels ──────────────────────────────────────────── */
+ion-fab-list ion-fab-button {
+  --box-shadow: 0 2px 8px rgba(0,0,0,0.15);
 }
 
 /* ── Custom toast notifications ──────────────────────────── */
 .toast-container {
   position: fixed;
-  bottom: 24px;
+  bottom: 28px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 99999;
-  width: calc(100% - 32px);
-  max-width: 440px;
+  width: calc(100% - 48px);
+  max-width: 360px;
   pointer-events: none;
 }
 
@@ -1342,64 +1542,87 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  align-items: center;
 }
 
 .custom-toast {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
-  border-radius: 14px;
-  background: #fff;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.14), 0 2px 8px rgba(0, 0, 0, 0.08);
-  border-left: 4px solid var(--toast-accent);
+  gap: 10px;
+  padding: 10px 12px 10px 10px;
+  border-radius: 40px;
+  background: rgba(22, 22, 26, 0.88);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 4px 28px rgba(0, 0, 0, 0.30), 0 1px 6px rgba(0, 0, 0, 0.18);
   pointer-events: all;
   width: 100%;
   box-sizing: border-box;
 }
 
-.toast-primary  { --toast-accent: var(--ion-color-primary); }
-.toast-success  { --toast-accent: var(--ion-color-success); }
-.toast-warning  { --toast-accent: var(--ion-color-warning); }
-.toast-danger   { --toast-accent: var(--ion-color-danger); }
+.toast-primary  { --toast-accent: #6eb4ff; --toast-glow: rgba(110,180,255,0.20); }
+.toast-success  { --toast-accent: #4cd964; --toast-glow: rgba(76,217,100,0.20); }
+.toast-warning  { --toast-accent: #ffd60a; --toast-glow: rgba(255,214,10,0.20); }
+.toast-danger   { --toast-accent: #ff453a; --toast-glow: rgba(255,69,58,0.20); }
+
+.toast-icon-wrap {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--toast-glow);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
 
 .toast-icon {
-  font-size: 20px;
+  font-size: 16px;
   color: var(--toast-accent);
-  flex-shrink: 0;
 }
 
 .toast-message {
   flex: 1;
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 500;
-  color: var(--ion-color-dark);
-  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.95);
+  line-height: 1.35;
 }
 
 .toast-close {
-  --color: var(--ion-color-medium);
-  --padding-start: 4px;
-  --padding-end: 4px;
-  margin: -6px -6px -6px 0;
+  background: none;
+  border: none;
+  padding: 4px;
+  margin: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.40);
+  font-size: 16px;
   flex-shrink: 0;
+  border-radius: 50%;
+  transition: color 0.15s;
 }
+.toast-close:hover { color: rgba(255, 255, 255, 0.75); }
 
-/* Slide-up / fade animation */
+/* Slide-up / spring animation */
 .toast-enter-active {
-  animation: toast-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation: toast-in 0.32s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 .toast-leave-active {
-  animation: toast-out 0.22s ease both;
+  animation: toast-out 0.2s ease both;
+  position: absolute;
+  width: 100%;
 }
 
 @keyframes toast-in {
-  from { opacity: 0; transform: translateY(16px) scale(0.97); }
-  to   { opacity: 1; transform: translateY(0)   scale(1); }
+  from { opacity: 0; transform: translateY(20px) scale(0.94); }
+  to   { opacity: 1; transform: translateY(0)    scale(1); }
 }
 
 @keyframes toast-out {
-  from { opacity: 1; transform: translateY(0); }
-  to   { opacity: 0; transform: translateY(-8px); }
+  from { opacity: 1; transform: scale(1); }
+  to   { opacity: 0; transform: scale(0.92); }
 }
 </style>

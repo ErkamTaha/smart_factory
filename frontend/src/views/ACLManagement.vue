@@ -7,284 +7,270 @@
                 </ion-buttons>
                 <ion-title>ACL Management</ion-title>
                 <ion-buttons slot="end">
-                    <ion-button color="light" title="Refresh" @click="refreshData" :disabled="isLoading">
+                    <ion-button color="light" @click="refreshData" :disabled="isLoading" title="Refresh">
                         <ion-icon :icon="refreshOutline" slot="icon-only"></ion-icon>
                     </ion-button>
                 </ion-buttons>
             </ion-toolbar>
         </ion-header>
 
-        <ion-content class="ion-padding">
-            <!-- ACL Status Card -->
-            <ion-card>
-                <ion-card-header>
-                    <ion-card-title>
-                        <ion-icon :icon="shieldCheckmarkOutline"></ion-icon>
-                        ACL Status
-                    </ion-card-title>
-                </ion-card-header>
-                <ion-card-content>
-                    <ion-grid v-if="aclInfo">
-                        <ion-row>
-                            <ion-col size="6" size-md="3">
-                                <div class="stat-item">
-                                    <h2>{{ aclInfo.total_users }}</h2>
-                                    <p>Total Users</p>
-                                </div>
-                            </ion-col>
-                            <ion-col size="6" size-md="3">
-                                <div class="stat-item">
-                                    <h2>{{ aclInfo.total_roles }}</h2>
-                                    <p>Total Roles</p>
-                                </div>
-                            </ion-col>
-                            <ion-col size="6" size-md="3">
-                                <div class="stat-item">
-                                    <h2>{{ aclInfo.default_policy }}</h2>
-                                    <p>Default Policy</p>
-                                </div>
-                            </ion-col>
-                            <ion-col size="6" size-md="3">
-                                <div class="stat-item">
-                                    <h2>{{ aclInfo.version }}</h2>
-                                    <p>Version</p>
-                                </div>
-                            </ion-col>
-                        </ion-row>
-                    </ion-grid>
-                    <div class="action-row">
-                        <ion-button @click="reloadACL" fill="outline">
-                            <ion-icon :icon="refreshOutline" slot="start"></ion-icon>
-                            Reload ACL
-                        </ion-button>
-                        <ion-button @click="viewActiveSessions" fill="outline">
-                            <ion-icon :icon="peopleOutline" slot="start"></ion-icon>
-                            Active Sessions
-                        </ion-button>
-                    </div>
-                </ion-card-content>
-            </ion-card>
-
-            <!-- Tabs for Users and Roles -->
-            <ion-segment v-model="activeTab" @ion-change="onSegmentChange">
-                <ion-segment-button value="users">
-                    <ion-label>Users</ion-label>
-                </ion-segment-button>
-                <ion-segment-button value="roles">
-                    <ion-label>Roles</ion-label>
-                </ion-segment-button>
-                <ion-segment-button value="permissions">
-                    <ion-label>Permission Checker</ion-label>
-                </ion-segment-button>
-            </ion-segment>
-
-            <!-- Users Tab -->
-            <div v-show="activeTab === 'users'">
-                <!-- Create User Card -->
-                <ion-card>
-                    <ion-card-header>
-                        <ion-card-title>Create New User</ion-card-title>
-                    </ion-card-header>
-                    <ion-card-content>
-                        <ion-grid>
-                            <ion-row>
-                                <ion-col size="12" size-md="6">
-                                    <ion-item>
-                                        <ion-input v-model="newUser.userId" label="User ID" placeholder="Enter user ID"
-                                            label-placement="stacked"></ion-input>
-                                    </ion-item>
-                                </ion-col>
-                                <ion-col size="12" size-md="6">
-                                    <ion-item>
-                                        <ion-select v-model="newUser.roles" multiple label="Roles"
-                                            placeholder="Select roles" label-placement="stacked">
-                                            <ion-select-option v-for="role in availableRoles" :key="role" :value="role">
-                                                {{ role }}
-                                            </ion-select-option>
-                                        </ion-select>
-                                    </ion-item>
-                                </ion-col>
-                            </ion-row>
-                        </ion-grid>
-                        <ion-button expand="block" @click="createUser" :disabled="!isValidNewUser"
-                            class="ion-margin-top">
-                            <ion-icon :icon="personAddOutline" slot="start"></ion-icon>
-                            Create User
-                        </ion-button>
-                    </ion-card-content>
-                </ion-card>
-
-                <!-- Users List -->
-                <ion-card>
-                    <ion-card-header>
-                        <ion-card-title>Users ({{ users.length }})</ion-card-title>
-                    </ion-card-header>
-                    <ion-card-content>
-                        <ion-searchbar v-model="userSearchTerm" placeholder="Search users..."
-                            @ion-input="filterUsers"></ion-searchbar>
-
-                        <ion-list>
-                            <ion-item v-for="user in filteredUsers" :key="user.username">
-                                <ion-label>
-                                    <h2>{{ user.username }}</h2>
-                                    <p>
-                                        <ion-chip v-for="role in user.roles" :key="role" color="primary" size="small">
-                                            {{ role }}
-                                        </ion-chip>
-                                    </p>
-                                    <p class="user-permissions">{{ user.all_permissions?.length || 0 }} permission(s)
-                                    </p>
-                                </ion-label>
-                                <ion-button slot="end" fill="clear" @click="editUser(user)">
-                                    <ion-icon :icon="createOutline"></ion-icon>
-                                </ion-button>
-                                <ion-button slot="end" fill="clear" @click="viewUserDetails(user)">
-                                    <ion-icon :icon="eyeOutline"></ion-icon>
-                                </ion-button>
-                                <ion-button slot="end" fill="clear" color="danger" @click="deleteUser(user.username)">
-                                    <ion-icon :icon="trashOutline"></ion-icon>
-                                </ion-button>
-                            </ion-item>
-                        </ion-list>
-                    </ion-card-content>
-                </ion-card>
+        <ion-content>
+            <!-- Loading -->
+            <div v-if="isLoading && !aclInfo" class="page-loading">
+                <ion-spinner name="crescent" color="primary"></ion-spinner>
+                <p>Loading ACL data...</p>
             </div>
 
-            <!-- Roles Tab -->
-            <div v-show="activeTab === 'roles'">
-                <ion-card>
-                    <ion-card-header>
-                        <ion-card-title>Available Roles</ion-card-title>
-                    </ion-card-header>
+            <div v-else>
+                <!-- Stats Strip -->
+                <ion-card class="stats-card">
                     <ion-card-content>
-                        <ion-list>
-                            <ion-item v-for="(roleData, roleName) in rolesData" :key="roleName" class="role-item">
-                                <ion-label>
-                                    <h2>{{ roleName }}</h2>
-                                    <p>{{ roleData.description }}</p>
-                                    <div class="role-permissions">
-                                        <h4>Permissions:</h4>
-                                        <div v-for="(perm, idx) in roleData.permissions" :key="idx"
-                                            class="permission-item">
-                                            <strong>{{ perm.pattern }}</strong>
-                                            <div class="permission-actions">
-                                                <ion-chip v-for="action in perm.allow" :key="action" color="success"
-                                                    size="small">
-                                                    ✓ {{ action }}
-                                                </ion-chip>
-                                                <ion-chip v-for="action in (perm.deny || [])" :key="action"
-                                                    color="danger" size="small">
-                                                    ✗ {{ action }}
-                                                </ion-chip>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </ion-label>
-                            </ion-item>
-                        </ion-list>
-                    </ion-card-content>
-                </ion-card>
-            </div>
-
-            <!-- Permission Checker Tab -->
-            <div v-show="activeTab === 'permissions'">
-                <ion-card>
-                    <ion-card-header>
-                        <ion-card-title>Permission Checker</ion-card-title>
-                    </ion-card-header>
-                    <ion-card-content>
-                        <ion-grid>
-                            <ion-row>
-                                <ion-col size="12" size-md="4">
-                                    <ion-item>
-                                        <ion-select v-model="permCheck.userId" label="User" placeholder="Select user"
-                                            label-placement="stacked">
-                                            <ion-select-option v-for="user in users" :key="user.username"
-                                                :value="user.username">
-                                                {{ user.username }}
-                                            </ion-select-option>
-                                        </ion-select>
-                                    </ion-item>
-                                </ion-col>
-                                <ion-col size="12" size-md="4">
-                                    <ion-item>
-                                        <ion-input v-model="permCheck.topic" label="Topic"
-                                            placeholder="e.g., sf/sensors/temperature"
-                                            label-placement="stacked"></ion-input>
-                                    </ion-item>
-                                </ion-col>
-                                <ion-col size="12" size-md="4">
-                                    <ion-item>
-                                        <ion-select v-model="permCheck.action" label="Action" label-placement="stacked">
-                                            <ion-select-option value="subscribe">Subscribe</ion-select-option>
-                                            <ion-select-option value="publish">Publish</ion-select-option>
-                                        </ion-select>
-                                    </ion-item>
-                                </ion-col>
-                            </ion-row>
-                        </ion-grid>
-
-                        <ion-button expand="block" @click="checkPermission" :disabled="!isValidPermCheck"
-                            class="ion-margin-top">
-                            <ion-icon :icon="checkmarkCircleOutline" slot="start"></ion-icon>
-                            Check Permission
-                        </ion-button>
-
-                        <div v-if="permCheckResult" class="permission-result ion-margin-top">
-                            <ion-card :color="permCheckResult.allowed ? 'success' : 'danger'">
-                                <ion-card-content>
-                                    <div class="result-header">
-                                        <ion-icon
-                                            :icon="permCheckResult.allowed ? checkmarkCircleOutline : closeCircleOutline"></ion-icon>
-                                        <h3>{{ permCheckResult.allowed ? 'ALLOWED' : 'DENIED' }}</h3>
-                                    </div>
-                                    <p><strong>User:</strong> {{ permCheckResult.username }}</p>
-                                    <p><strong>Topic:</strong> {{ permCheckResult.topic }}</p>
-                                    <p><strong>Action:</strong> {{ permCheckResult.action }}</p>
-                                </ion-card-content>
-                            </ion-card>
+                        <div class="acl-stats-row">
+                            <div class="acl-stat">
+                                <span class="acl-stat-val">{{ aclInfo?.total_users ?? '—' }}</span>
+                                <span class="acl-stat-label">Users</span>
+                            </div>
+                            <div class="acl-stat">
+                                <span class="acl-stat-val">{{ aclInfo?.total_roles ?? '—' }}</span>
+                                <span class="acl-stat-label">Roles</span>
+                            </div>
+                            <div class="acl-stat">
+                                <span class="acl-stat-val">{{ aclInfo?.default_policy ?? '—' }}</span>
+                                <span class="acl-stat-label">Policy</span>
+                            </div>
+                            <div class="acl-stat">
+                                <span class="acl-stat-val">{{ aclInfo?.version ?? '—' }}</span>
+                                <span class="acl-stat-label">Version</span>
+                            </div>
+                        </div>
+                        <div class="acl-actions">
+                            <ion-button fill="outline" size="small" @click="reloadACL" :disabled="isLoading">
+                                <ion-icon :icon="refreshOutline" slot="start"></ion-icon>
+                                Reload ACL
+                            </ion-button>
+                            <ion-button fill="outline" size="small" @click="openSessions">
+                                <ion-icon :icon="peopleOutline" slot="start"></ion-icon>
+                                Sessions
+                            </ion-button>
                         </div>
                     </ion-card-content>
                 </ion-card>
+
+                <!-- Tabs -->
+                <ion-segment v-model="activeTab" class="tab-segment">
+                    <ion-segment-button value="users">
+                        <ion-label>Users</ion-label>
+                    </ion-segment-button>
+                    <ion-segment-button value="roles">
+                        <ion-label>Roles</ion-label>
+                    </ion-segment-button>
+                    <ion-segment-button value="permissions">
+                        <ion-label>Checker</ion-label>
+                    </ion-segment-button>
+                </ion-segment>
+
+                <!-- ── USERS TAB ─────────────────────────────────── -->
+                <div v-show="activeTab === 'users'">
+                    <!-- Create User -->
+                    <ion-card>
+                        <ion-card-header>
+                            <ion-card-title>
+                                <ion-icon :icon="personAddOutline"></ion-icon>
+                                New User
+                            </ion-card-title>
+                        </ion-card-header>
+                        <ion-card-content>
+                            <ion-item>
+                                <ion-input v-model="newUser.username" label="Username" label-placement="stacked"
+                                    placeholder="e.g. john_doe" clearInput autocomplete="off"></ion-input>
+                            </ion-item>
+                            <ion-item>
+                                <ion-input v-model="newUser.email" label="Email" label-placement="stacked"
+                                    type="email" placeholder="e.g. john@example.com" clearInput autocomplete="off"></ion-input>
+                            </ion-item>
+                            <ion-item>
+                                <ion-input v-model="newUser.password" label="Password" label-placement="stacked"
+                                    type="password" placeholder="Min 8 characters" clearInput autocomplete="new-password"></ion-input>
+                            </ion-item>
+                            <ion-item>
+                                <ion-select v-model="newUser.roles" multiple label="Roles"
+                                    label-placement="stacked" placeholder="Select roles">
+                                    <ion-select-option v-for="role in availableRoles" :key="role" :value="role">
+                                        {{ role }}
+                                    </ion-select-option>
+                                </ion-select>
+                            </ion-item>
+                            <ion-button class="create-btn" @click="createUser"
+                                :disabled="!isValidNewUser || isLoading">
+                                <ion-icon :icon="personAddOutline" slot="start"></ion-icon>
+                                Create User
+                            </ion-button>
+                        </ion-card-content>
+                    </ion-card>
+
+                    <!-- Users List -->
+                    <ion-card>
+                        <ion-card-header>
+                            <ion-card-title>
+                                <ion-icon :icon="peopleOutline"></ion-icon>
+                                Users
+                                <ion-chip color="primary" size="small" style="margin-left:8px">
+                                    {{ filteredUsers.length }}
+                                </ion-chip>
+                            </ion-card-title>
+                        </ion-card-header>
+                        <ion-card-content style="padding: 0">
+                            <ion-searchbar v-model="userSearchTerm" placeholder="Search users..."
+                                @ion-input="filterUsers" class="user-search"></ion-searchbar>
+                            <ion-list lines="full">
+                                <ion-item v-for="user in filteredUsers" :key="user.username">
+                                    <div slot="start" class="item-avatar item-avatar-sm">
+                                        {{ user.username.charAt(0).toUpperCase() }}
+                                    </div>
+                                    <ion-label>
+                                        <h3>{{ user.username }}</h3>
+                                        <p>
+                                            <ion-chip v-for="role in user.roles" :key="role"
+                                                color="primary" size="small">{{ role }}</ion-chip>
+                                            <span v-if="!user.roles?.length" class="text-muted">No roles</span>
+                                        </p>
+                                        <p class="text-muted">
+                                            {{ user.all_permissions?.length || 0 }} permission(s)
+                                        </p>
+                                    </ion-label>
+                                    <ion-button slot="end" fill="clear" size="small" @click="editUser(user)">
+                                        <ion-icon :icon="createOutline"></ion-icon>
+                                    </ion-button>
+                                    <ion-button slot="end" fill="clear" size="small" @click="viewUserDetails(user)">
+                                        <ion-icon :icon="eyeOutline"></ion-icon>
+                                    </ion-button>
+                                    <ion-button slot="end" fill="clear" size="small" color="danger"
+                                        @click="deleteUser(user.username)">
+                                        <ion-icon :icon="trashOutline"></ion-icon>
+                                    </ion-button>
+                                </ion-item>
+                                <ion-item v-if="filteredUsers.length === 0">
+                                    <ion-label class="text-muted" style="text-align:center;padding:16px 0">
+                                        No users found
+                                    </ion-label>
+                                </ion-item>
+                            </ion-list>
+                        </ion-card-content>
+                    </ion-card>
+                </div>
+
+                <!-- ── ROLES TAB ─────────────────────────────────── -->
+                <div v-show="activeTab === 'roles'">
+                    <ion-card v-for="(roleData, roleName) in rolesData" :key="roleName" class="role-card">
+                        <ion-card-header>
+                            <ion-card-title>
+                                <ion-icon :icon="shieldCheckmarkOutline"></ion-icon>
+                                {{ roleName }}
+                            </ion-card-title>
+                            <ion-card-subtitle v-if="roleData.description">
+                                {{ roleData.description }}
+                            </ion-card-subtitle>
+                        </ion-card-header>
+                        <ion-card-content>
+                            <p class="perm-section-label">Permissions</p>
+                            <div v-for="(perm, idx) in roleData.permissions" :key="idx" class="perm-block">
+                                <code class="perm-pattern">{{ perm.pattern }}</code>
+                                <div class="perm-chips">
+                                    <ion-chip v-for="action in perm.allow" :key="action"
+                                        color="success" size="small">✓ {{ action }}</ion-chip>
+                                    <ion-chip v-for="action in (perm.deny || [])" :key="action"
+                                        color="danger" size="small">✗ {{ action }}</ion-chip>
+                                </div>
+                            </div>
+                            <p v-if="!roleData.permissions?.length" class="text-muted">No permissions defined</p>
+                        </ion-card-content>
+                    </ion-card>
+                </div>
+
+                <!-- ── PERMISSION CHECKER TAB ────────────────────── -->
+                <div v-show="activeTab === 'permissions'">
+                    <ion-card>
+                        <ion-card-header>
+                            <ion-card-title>
+                                <ion-icon :icon="checkmarkCircleOutline"></ion-icon>
+                                Permission Checker
+                            </ion-card-title>
+                        </ion-card-header>
+                        <ion-card-content>
+                            <ion-item>
+                                <ion-select v-model="permCheck.userId" label="User"
+                                    label-placement="stacked" placeholder="Select user">
+                                    <ion-select-option v-for="user in users" :key="user.username"
+                                        :value="user.username">{{ user.username }}</ion-select-option>
+                                </ion-select>
+                            </ion-item>
+                            <ion-item>
+                                <ion-input v-model="permCheck.topic" label="Topic"
+                                    label-placement="stacked" placeholder="sf/sensors/+/temperature"></ion-input>
+                            </ion-item>
+                            <ion-item>
+                                <ion-select v-model="permCheck.action" label="Action" label-placement="stacked">
+                                    <ion-select-option value="subscribe">Subscribe</ion-select-option>
+                                    <ion-select-option value="publish">Publish</ion-select-option>
+                                </ion-select>
+                            </ion-item>
+                            <ion-button class="create-btn" @click="checkPermission" :disabled="!isValidPermCheck">
+                                <ion-icon :icon="checkmarkCircleOutline" slot="start"></ion-icon>
+                                Check
+                            </ion-button>
+
+                            <!-- Result -->
+                            <div v-if="permCheckResult" class="perm-result"
+                                :class="permCheckResult.allowed ? 'perm-result-ok' : 'perm-result-deny'">
+                                <ion-icon :icon="permCheckResult.allowed ? checkmarkCircleOutline : closeCircleOutline"
+                                    class="perm-result-icon"></ion-icon>
+                                <div>
+                                    <strong>{{ permCheckResult.allowed ? 'ALLOWED' : 'DENIED' }}</strong>
+                                    <p>{{ permCheckResult.username }} · {{ permCheckResult.action }} ·
+                                        <code>{{ permCheckResult.topic }}</code>
+                                    </p>
+                                </div>
+                            </div>
+                        </ion-card-content>
+                    </ion-card>
+                </div>
             </div>
 
-            <!-- Edit User Modal -->
+            <!-- ── EDIT USER MODAL ──────────────────────────────── -->
             <ion-modal :is-open="showEditModal" @will-dismiss="showEditModal = false">
                 <ion-header>
-                    <ion-toolbar>
-                        <ion-title>Edit User: {{ editingUser?.username }}</ion-title>
+                    <ion-toolbar color="primary">
+                        <ion-title>Edit — {{ editingUser?.username }}</ion-title>
                         <ion-buttons slot="end">
-                            <ion-button @click="showEditModal = false">
+                            <ion-button color="light" @click="showEditModal = false">
                                 <ion-icon :icon="closeOutline"></ion-icon>
                             </ion-button>
                         </ion-buttons>
                     </ion-toolbar>
                 </ion-header>
                 <ion-content class="ion-padding">
-                    <ion-list v-if="editingUser">
-                        <ion-item>
-                            <ion-select v-model="editingUser.roles" multiple label="Roles" placeholder="Select roles"
-                                label-placement="stacked">
-                                <ion-select-option v-for="role in availableRoles" :key="role" :value="role">
-                                    {{ role }}
-                                </ion-select-option>
-                            </ion-select>
-                        </ion-item>
-                    </ion-list>
-                    <ion-button expand="block" @click="updateUser" class="ion-margin-top">
+                    <ion-item v-if="editingUser">
+                        <ion-select v-model="editingUser.roles" multiple label="Roles"
+                            label-placement="stacked" placeholder="Select roles">
+                            <ion-select-option v-for="role in availableRoles" :key="role" :value="role">
+                                {{ role }}
+                            </ion-select-option>
+                        </ion-select>
+                    </ion-item>
+                    <ion-button class="ion-margin-top" @click="updateUser" :disabled="isLoading">
                         <ion-icon :icon="saveOutline" slot="start"></ion-icon>
-                        Update User
+                        Save Changes
                     </ion-button>
                 </ion-content>
             </ion-modal>
 
-            <!-- User Details Modal -->
+            <!-- ── USER DETAILS MODAL ───────────────────────────── -->
             <ion-modal :is-open="showDetailsModal" @will-dismiss="showDetailsModal = false">
                 <ion-header>
-                    <ion-toolbar>
-                        <ion-title>User Details: {{ selectedUser?.username }}</ion-title>
+                    <ion-toolbar color="primary">
+                        <ion-title>{{ selectedUser?.username }}</ion-title>
                         <ion-buttons slot="end">
-                            <ion-button @click="showDetailsModal = false">
+                            <ion-button color="light" @click="showDetailsModal = false">
                                 <ion-icon :icon="closeOutline"></ion-icon>
                             </ion-button>
                         </ion-buttons>
@@ -292,74 +278,67 @@
                 </ion-header>
                 <ion-content class="ion-padding">
                     <div v-if="selectedUser">
-                        <ion-card>
-                            <ion-card-header>
-                                <ion-card-title>Basic Information</ion-card-title>
-                            </ion-card-header>
-                            <ion-card-content>
-                                <p><strong>Username:</strong> {{ selectedUser.username }}</p>
-                                <p><strong>Roles:</strong></p>
-                                <div class="roles-list">
-                                    <ion-chip v-for="role in selectedUser.roles" :key="role" color="primary">
-                                        {{ role }}
-                                    </ion-chip>
-                                </div>
-                            </ion-card-content>
-                        </ion-card>
+                        <!-- Roles -->
+                        <p class="modal-section-label">Roles</p>
+                        <div class="modal-chips">
+                            <ion-chip v-for="role in selectedUser.roles" :key="role" color="primary">
+                                {{ role }}
+                            </ion-chip>
+                            <span v-if="!selectedUser.roles?.length" class="text-muted">No roles assigned</span>
+                        </div>
 
-                        <ion-card>
-                            <ion-card-header>
-                                <ion-card-title>Permissions ({{ selectedUser.permissions.length }})</ion-card-title>
-                            </ion-card-header>
-                            <ion-card-content>
-                                <div v-for="(perm, idx) in selectedUser.permissions" :key="idx"
-                                    class="permission-detail">
-                                    <h4>{{ perm.pattern }}</h4>
-                                    <div class="permission-actions">
-                                        <ion-chip v-for="action in perm.allow" :key="action" color="success"
-                                            size="small">
-                                            ✓ {{ action }}
-                                        </ion-chip>
-                                        <ion-chip v-for="action in (perm.deny || [])" :key="action" color="danger"
-                                            size="small">
-                                            ✗ {{ action }}
-                                        </ion-chip>
-                                    </div>
-                                </div>
-                            </ion-card-content>
-                        </ion-card>
+                        <!-- Permissions -->
+                        <p class="modal-section-label">
+                            Permissions ({{ selectedUser.all_permissions?.length || 0 }})
+                        </p>
+                        <div v-for="(perm, idx) in selectedUser.all_permissions" :key="idx" class="perm-block">
+                            <code class="perm-pattern">{{ perm.pattern }}</code>
+                            <div class="perm-chips">
+                                <ion-chip v-for="action in perm.allow" :key="action" color="success" size="small">
+                                    ✓ {{ action }}
+                                </ion-chip>
+                                <ion-chip v-for="action in (perm.deny || [])" :key="action" color="danger" size="small">
+                                    ✗ {{ action }}
+                                </ion-chip>
+                            </div>
+                        </div>
+                        <p v-if="!selectedUser.all_permissions?.length" class="text-muted">No permissions</p>
                     </div>
                 </ion-content>
             </ion-modal>
 
-            <!-- Active Sessions Modal -->
+            <!-- ── SESSIONS MODAL ───────────────────────────────── -->
             <ion-modal :is-open="showSessionsModal" @will-dismiss="showSessionsModal = false">
                 <ion-header>
-                    <ion-toolbar>
-                        <ion-title>Active MQTT Sessions</ion-title>
+                    <ion-toolbar color="primary">
+                        <ion-title>Active Sessions</ion-title>
                         <ion-buttons slot="end">
-                            <ion-button @click="showSessionsModal = false">
+                            <ion-button color="light" @click="showSessionsModal = false">
                                 <ion-icon :icon="closeOutline"></ion-icon>
                             </ion-button>
                         </ion-buttons>
                     </ion-toolbar>
                 </ion-header>
                 <ion-content class="ion-padding">
-                    <ion-list>
-                        <ion-item v-for="session in activeSessions" :key="session.user_id">
+                    <ion-list v-if="activeSessions.length > 0" lines="full">
+                        <ion-item v-for="session in activeSessions" :key="session.id">
+                            <div slot="start" class="item-avatar item-avatar-sm">
+                                {{ (session.username || session.client_id || '?').charAt(0).toUpperCase() }}
+                            </div>
                             <ion-label>
-                                <h2>{{ session.user_id }}</h2>
-                                <p>
-                                    <ion-chip :color="session.is_connected ? 'success' : 'danger'" size="small">
-                                        {{ session.is_connected ? 'Connected' : 'Disconnected' }}
-                                    </ion-chip>
-                                </p>
-                                <p>Topics: {{ session.subscribed_topics.length }}</p>
-                                <p>Roles: {{ session.roles.join(', ') || 'None' }}</p>
-                                <p>Permissions: {{ session.permissions_count }}</p>
+                                <h3>{{ session.username || session.client_id }}</h3>
+                                <p>{{ session.subscribed_topics?.length || 0 }} topics · {{ session.ip_address || 'unknown IP' }}</p>
+                                <p class="text-muted">Connected: {{ formatTs(session.connected_at) }}</p>
                             </ion-label>
+                            <ion-chip slot="end" :color="session.is_active ? 'success' : 'medium'" size="small">
+                                {{ session.is_active ? 'Active' : 'Closed' }}
+                            </ion-chip>
                         </ion-item>
                     </ion-list>
+                    <div v-else class="empty-state">
+                        <ion-icon :icon="peopleOutline" size="large" color="medium"></ion-icon>
+                        <p>No active sessions</p>
+                    </div>
                 </ion-content>
             </ion-modal>
         </ion-content>
@@ -371,161 +350,116 @@ import { ref, computed, onMounted } from 'vue';
 import {
     IonPage, IonHeader, IonToolbar, IonTitle, IonContent, IonButtons, IonButton,
     IonBackButton, IonIcon, IonCard, IonCardContent, IonCardHeader, IonCardTitle,
-    IonGrid, IonRow, IonCol, IonItem, IonLabel, IonInput, IonSelect, IonSelectOption,
+    IonCardSubtitle, IonItem, IonLabel, IonInput, IonSelect, IonSelectOption,
     IonChip, IonList, IonSearchbar, IonSegment, IonSegmentButton, IonModal,
-    IonTextarea, alertController, toastController
+    IonSpinner, alertController, toastController
 } from '@ionic/vue';
-
 import {
     refreshOutline, shieldCheckmarkOutline, peopleOutline, personAddOutline,
     createOutline, eyeOutline, trashOutline, checkmarkCircleOutline,
     closeCircleOutline, closeOutline, saveOutline
 } from 'ionicons/icons';
-
 import apiService from '@/services/api';
 
-// State
+// ── State ───────────────────────────────────────────────────
 const isLoading = ref(false);
 const activeTab = ref('users');
 
-// Data
 const aclInfo = ref(null);
 const users = ref([]);
 const rolesData = ref({});
 const availableRoles = ref([]);
 const activeSessions = ref([]);
 
-// Search and filtering
 const userSearchTerm = ref('');
 const filteredUsers = ref([]);
 
-// Modals
 const showEditModal = ref(false);
 const showDetailsModal = ref(false);
 const showSessionsModal = ref(false);
 
-// Forms
-const newUser = ref({
-    userId: '',
-    roles: []
-});
-
+const newUser = ref({ username: '', email: '', password: '', roles: [] });
 const editingUser = ref(null);
 const selectedUser = ref(null);
-
-const permCheck = ref({
-    userId: '',
-    topic: '',
-    action: 'subscribe'
-});
-
+const permCheck = ref({ userId: '', topic: '', action: 'subscribe' });
 const permCheckResult = ref(null);
 
-// Computed
-const isValidNewUser = computed(() => {
-    return newUser.value.userId.trim() && newUser.value.roles.length > 0;
-});
+// ── Computed ────────────────────────────────────────────────
+const isValidNewUser = computed(() =>
+    newUser.value.username.trim() &&
+    newUser.value.email.trim() &&
+    newUser.value.password.length >= 8 &&
+    newUser.value.roles.length > 0
+);
+const isValidPermCheck = computed(() =>
+    permCheck.value.userId && permCheck.value.topic && permCheck.value.action
+);
 
-const isValidPermCheck = computed(() => {
-    return permCheck.value.userId && permCheck.value.topic && permCheck.value.action;
-});
-
-// Methods
+// ── Helpers ─────────────────────────────────────────────────
 const showToast = async (message, color = 'primary') => {
     const toast = await toastController.create({
         message,
         duration: 3000,
-        color,
-        position: 'bottom'
+        position: 'bottom',
+        cssClass: `app-toast app-toast-${color}`,
     });
     await toast.present();
 };
 
-const showAlert = async (header, message) => {
-    const alert = await alertController.create({
-        header,
-        message,
-        buttons: ['OK']
-    });
-    await alert.present();
-};
+const formatTs = (ts) => ts ? new Date(ts).toLocaleString() : '—';
 
-// Data loading methods
+// ── Data loading ─────────────────────────────────────────────
 const loadACLInfo = async () => {
-    try {
-        const response = await apiService.getACLInfo();
-        aclInfo.value = response.data;
-    } catch (err) {
-        console.error('Failed to load ACL info:', err);
-        showToast('Failed to load ACL info', 'danger');
-    }
+    const response = await apiService.getACLInfo();
+    aclInfo.value = response.data;
 };
 
 const loadUsers = async () => {
-    try {
-        const response = await apiService.getAllUsers();
-        users.value = response.data || [];
-        filteredUsers.value = users.value;
-        console.log(users.value)
-    } catch (err) {
-        console.error('Failed to load users:', err);
-        showToast('Failed to load users', 'danger');
-    }
+    const response = await apiService.getAllUsers();
+    users.value = response.data || [];
+    filteredUsers.value = users.value;
 };
 
 const loadRoles = async () => {
-    try {
-        const response = await apiService.getAllRoles();
-        rolesData.value = response.data || {};
-        availableRoles.value = Object.keys(rolesData.value);
-    } catch (err) {
-        console.error('Failed to load roles:', err);
-        showToast('Failed to load roles', 'danger');
-    }
+    const response = await apiService.getAllRoles();
+    rolesData.value = response.data || {};
+    availableRoles.value = Object.keys(rolesData.value);
 };
 
-const loadActiveSessions = async () => {
-    try {
-        const response = await apiService.getActiveSessions();
-        activeSessions.value = response.data || [];
-    } catch (err) {
-        console.error('Failed to load active sessions:', err);
-        showToast('Failed to load active sessions', 'danger');
-    }
+const loadSessions = async () => {
+    const response = await apiService.getActiveSessions();
+    // Response is { sessions: [...], count: N }
+    activeSessions.value = response.data?.sessions || response.data || [];
 };
 
 const refreshData = async () => {
     isLoading.value = true;
     try {
-        await Promise.all([
-            loadACLInfo(),
-            loadUsers(),
-            loadRoles(),
-            loadActiveSessions()
-        ]);
-        showToast('Data refreshed', 'success');
+        await Promise.all([loadACLInfo(), loadUsers(), loadRoles()]);
     } catch (err) {
-        showToast('Failed to refresh data', 'danger');
+        showToast('Failed to load ACL data', 'danger');
     } finally {
         isLoading.value = false;
     }
 };
 
-// User management methods
+// ── User management ──────────────────────────────────────────
 const createUser = async () => {
     try {
         await apiService.createUser({
-            username: newUser.value.userId,
+            username: newUser.value.username.trim(),
+            email: newUser.value.email.trim(),
+            password: newUser.value.password,
             roles: newUser.value.roles,
             custom_permissions: []
         });
-
-        newUser.value = { userId: '', roles: [] };
+        newUser.value = { username: '', email: '', password: '', roles: [] };
         await loadUsers();
         await loadACLInfo();
-        showToast('User created successfully', 'success');
+        showToast('User created', 'success');
     } catch (err) {
-        showToast('Failed to create user', 'danger');
+        const msg = err.response?.data?.detail || 'Failed to create user';
+        showToast(msg, 'danger');
     }
 };
 
@@ -539,39 +473,35 @@ const updateUser = async () => {
         await apiService.updateUser(editingUser.value.username, {
             roles: editingUser.value.roles
         });
-
         showEditModal.value = false;
-        editingUser.value = null;
         await loadUsers();
-        showToast('User updated successfully', 'success');
+        showToast('User updated', 'success');
     } catch (err) {
         showToast('Failed to update user', 'danger');
     }
 };
 
-const deleteUser = async (userId) => {
+const deleteUser = async (username) => {
     const alert = await alertController.create({
         header: 'Delete User',
-        message: `Are you sure you want to delete user "${userId}"?`,
+        message: `Delete "${username}"? This cannot be undone.`,
         buttons: [
             { text: 'Cancel', role: 'cancel' },
-            {
-                text: 'Delete',
-                role: 'destructive',
-                handler: async () => {
-                    try {
-                        await apiService.deleteUser(userId);
-                        await loadUsers();
-                        await loadACLInfo();
-                        showToast('User deleted successfully', 'success');
-                    } catch (err) {
-                        showToast('Failed to delete user', 'danger');
-                    }
-                }
-            }
+            { text: 'Delete', role: 'destructive' },
         ]
     });
     await alert.present();
+    const { role } = await alert.onDidDismiss();
+    if (role !== 'destructive') return;
+
+    try {
+        await apiService.deleteUser(username);
+        await Promise.all([loadUsers(), loadACLInfo()]);
+        await showToast('User deleted', 'success');
+    } catch (err) {
+        console.error('Delete failed:', err);
+        await showToast('Failed to delete user', 'danger');
+    }
 };
 
 const viewUserDetails = (user) => {
@@ -579,7 +509,7 @@ const viewUserDetails = (user) => {
     showDetailsModal.value = true;
 };
 
-// Permission checking
+// ── Permission check ─────────────────────────────────────────
 const checkPermission = async () => {
     try {
         const result = await apiService.checkPermission({
@@ -588,122 +518,164 @@ const checkPermission = async () => {
             action: permCheck.value.action
         });
         permCheckResult.value = result.data;
-    } catch (err) {
+    } catch {
         showToast('Failed to check permission', 'danger');
     }
 };
 
-// Utility methods
+// ── Misc ─────────────────────────────────────────────────────
 const filterUsers = () => {
     const term = userSearchTerm.value.toLowerCase();
-    if (term) {
-        filteredUsers.value = users.value.filter(user =>
-            user.username.toLowerCase().includes(term) ||
-            user.roles.some(role => role.toLowerCase().includes(term))
-        );
-    } else {
-        filteredUsers.value = users.value;
-    }
-};
-
-const onSegmentChange = (event) => {
-    activeTab.value = event.detail.value;
-    permCheckResult.value = null; // Reset permission check result when switching tabs
+    filteredUsers.value = term
+        ? users.value.filter(u =>
+            u.username.toLowerCase().includes(term) ||
+            u.roles?.some(r => r.toLowerCase().includes(term))
+          )
+        : users.value;
 };
 
 const reloadACL = async () => {
     try {
         await apiService.reloadACL();
         await refreshData();
-        showToast('ACL configuration reloaded', 'success');
-    } catch (err) {
+        showToast('ACL reloaded', 'success');
+    } catch {
         showToast('Failed to reload ACL', 'danger');
     }
 };
 
-const viewActiveSessions = async () => {
-    await loadActiveSessions();
+const openSessions = async () => {
+    await loadSessions();
     showSessionsModal.value = true;
 };
 
-// Lifecycle
-onMounted(() => {
-    refreshData();
-});
+onMounted(refreshData);
 </script>
 
 <style scoped>
-/* stat-item and action-row are provided by global.css */
-
-.user-permissions {
-  font-size: 12px;
-  color: var(--ion-color-medium);
-  margin-top: 4px;
+/* ── Stats card ──────────────────────────────────────────── */
+.stats-card {
+  margin: 12px 16px 0;
 }
 
-.role-permissions {
-  margin-top: 12px;
+.acl-stats-row {
+  display: flex;
+  justify-content: space-around;
+  margin-bottom: 12px;
 }
 
-.role-permissions h4 {
-  margin: 0 0 8px;
-  font-size: 12px;
+.acl-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.acl-stat-val {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--ion-color-dark);
+  line-height: 1.1;
+  text-transform: capitalize;
+}
+
+.acl-stat-label {
+  font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: var(--ion-color-medium);
 }
 
-.permission-item {
-  margin-bottom: 8px;
-  padding: 10px 12px;
-  background: var(--ion-color-light);
-  border-radius: 8px;
-}
-
-.permission-item strong {
-  display: block;
-  margin-bottom: 6px;
-  font-family: monospace;
-  font-size: 13px;
-}
-
-.permission-actions {
+.acl-actions {
   display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
-}
-
-.permission-result .result-header {
-  display: flex;
-  align-items: center;
   gap: 8px;
-  margin-bottom: 12px;
+  flex-wrap: wrap;
 }
 
-.permission-result h3 {
-  margin: 0;
-  font-size: 18px;
+/* ── Tabs ────────────────────────────────────────────────── */
+.tab-segment {
+  margin: 10px 16px 0;
+}
+
+/* ── Create button ───────────────────────────────────────── */
+.create-btn {
+  margin-top: 12px;
+}
+
+/* ── Search ──────────────────────────────────────────────── */
+.user-search {
+  --padding-start: 0;
+  padding: 0 8px;
+}
+
+/* ── Roles ───────────────────────────────────────────────── */
+.role-card {
+  margin: 8px 16px;
+}
+
+.perm-section-label {
+  font-size: 11px;
   font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--ion-color-medium);
+  margin: 0 0 8px;
 }
 
-.roles-list {
-  margin-top: 8px;
+.perm-block {
+  background: var(--ion-color-light);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+}
+
+.perm-pattern {
+  display: block;
+  font-size: 12px;
+  font-family: monospace;
+  color: var(--ion-color-dark);
+  margin-bottom: 5px;
+}
+
+.perm-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
 }
 
-.permission-detail {
-  margin-bottom: 12px;
-  padding: 12px;
-  background: var(--ion-color-light);
-  border-radius: 8px;
+/* ── Permission checker result ───────────────────────────── */
+.perm-result {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 10px;
 }
 
-.permission-detail h4 {
-  margin: 0 0 8px;
-  font-family: monospace;
-  font-size: 13px;
+.perm-result-ok   { background: rgba(45, 211, 111, 0.12); color: #1a7a45; }
+.perm-result-deny { background: rgba(235, 68, 90, 0.10);  color: #a03040; }
+
+.perm-result-icon { font-size: 24px; flex-shrink: 0; margin-top: 2px; }
+
+.perm-result strong { font-size: 15px; font-weight: 700; display: block; }
+.perm-result p { margin: 4px 0 0; font-size: 13px; }
+.perm-result code { font-family: monospace; font-size: 12px; }
+
+/* ── Modal sections ──────────────────────────────────────── */
+.modal-section-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--ion-color-medium);
+  margin: 16px 0 6px;
+}
+
+.modal-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 </style>

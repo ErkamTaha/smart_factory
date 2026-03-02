@@ -113,7 +113,7 @@
                                     placeholder="e.g., get_status, restart, calibrate"></ion-input>
                             </ion-item>
                         </ion-list>
-                        <ion-button expand="block" @click="sendCommand" :disabled="!commandToSend.trim()">
+                        <ion-button @click="sendCommand" :disabled="!commandToSend.trim()">
                             <ion-icon :icon="send" slot="start"></ion-icon>
                             Send Command
                         </ion-button>

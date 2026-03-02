@@ -4,6 +4,7 @@ Async MQTT API router with database storage for sensor data, commands, and devic
 
 from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from datetime import datetime, timedelta, timezone
@@ -233,6 +234,12 @@ async def get_latest_readings(
     try:
         result = await db.execute(
             select(MQTTSensorReading)
+            .options(
+                selectinload(MQTTSensorReading.device),
+                selectinload(MQTTSensorReading.sensor),
+                selectinload(MQTTSensorReading.sensor_type_obj),
+                selectinload(MQTTSensorReading.user),
+            )
             .order_by(MQTTSensorReading.timestamp.desc())
             .limit(limit)
         )
@@ -313,11 +320,13 @@ async def publish_sensor_reading(
         )
         await db.commit()
 
-        # Publish to MQTT
+        # Publish to MQTT — include resolved names so subscribers don't need DB lookups
         mqtt_payload = {
             "device_id": data.device_id,
+            "device_name": reading.device.device_name if reading.device else data.device_id,
             "sensor_id": data.sensor_id,
             "sensor_type_id": data.sensor_type_id,
+            "sensor_type": reading.sensor_type_obj.name if reading.sensor_type_obj else None,
             "value": data.value,
             "unit": data.unit,
             "timestamp": timestamp.isoformat(),
