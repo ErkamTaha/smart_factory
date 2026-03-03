@@ -19,11 +19,11 @@
                                     :disabled="isLoading" />
                             </ion-item>
 
-                            <ion-item lines="full" class="form-item">
+                            <ion-item lines="full" class="form-item password-item">
                                 <ion-label position="floating">Password</ion-label>
                                 <ion-input v-model="password" :type="showPassword ? 'text' : 'password'"
                                     autocomplete="current-password" required :disabled="isLoading" />
-                                <ion-button slot="end" fill="clear" @click="showPassword = !showPassword" tabindex="-1">
+                                <ion-button slot="end" fill="clear" class="eye-btn" @click="showPassword = !showPassword" tabindex="-1">
                                     <ion-icon :icon="showPassword ? eyeOffOutline : eyeOutline" />
                                 </ion-button>
                             </ion-item>
@@ -149,6 +149,17 @@ const handleLogin = async () => {
 .form-item {
     margin-bottom: 8px;
     --border-radius: 8px;
+}
+
+.password-item {
+    --inner-padding-end: 0;
+}
+
+.eye-btn {
+    align-self: flex-end;
+    margin-bottom: 6px;
+    height: 36px;
+    width: 36px;
 }
 
 .error-message {

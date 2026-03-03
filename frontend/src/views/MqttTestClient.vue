@@ -466,11 +466,12 @@ import {
     peopleOutline,
 } from 'ionicons/icons';
 import webSocketService from '@/services/websocket';
+import apiService from '@/services/api';
 
 // State
 const activeTab = ref('mqtt');
 const userId = ref('alice');
-const wsUrl = ref('ws://localhost:8000/ws/ws');
+const wsUrl = ref(`ws://${window.location.host}/ws/ws`);
 const isConnected = ref(false);
 const connectionStatus = ref('Disconnected');
 
@@ -507,8 +508,6 @@ const permCheck = ref({
 
 const permCheckResult = ref(null);
 
-// API Base URL
-const API_BASE = 'http://localhost:8000';
 
 // Computed
 const statusColor = computed(() => {
@@ -738,8 +737,8 @@ const clearMessages = () => {
 // ACL Methods
 const loadAclInfo = async () => {
     try {
-        const response = await fetch(`${API_BASE}/api/acl/info`);
-        aclInfo.value = await response.json();
+        const response = await apiService.getACLInfo();
+        aclInfo.value = response.data;
         showToast('ACL info loaded', 'success');
     } catch (error) {
         showToast('Failed to load ACL info', 'danger');
@@ -748,10 +747,9 @@ const loadAclInfo = async () => {
 
 const loadRoles = async () => {
     try {
-        const response = await fetch(`${API_BASE}/api/acl/roles`);
-        const data = await response.json();
-        rolesData.value = data;
-        availableRoles.value = Object.keys(data);
+        const response = await apiService.getAllRoles();
+        rolesData.value = response.data;
+        availableRoles.value = Object.keys(response.data);
     } catch (error) {
         showToast('Failed to load roles', 'danger');
     }
@@ -759,9 +757,8 @@ const loadRoles = async () => {
 
 const loadUsers = async () => {
     try {
-        const response = await fetch(`${API_BASE}/api/acl/users`);
-        const data = await response.json();
-        usersList.value = data;
+        const response = await apiService.getAllUsers();
+        usersList.value = response.data;
     } catch (error) {
         showToast('Failed to load users', 'danger');
     }
@@ -774,27 +771,17 @@ const createUser = async () => {
     }
 
     try {
-        const response = await fetch(`${API_BASE}/api/acl/users`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                username: newUser.value.userId,
-                roles: newUser.value.roles,
-                custom_permissions: [],
-            }),
+        await apiService.createUser({
+            username: newUser.value.userId,
+            roles: newUser.value.roles,
+            custom_permissions: [],
         });
-
-        if (response.ok) {
-            showToast(`User ${newUser.value.userId} created successfully`, 'success');
-            newUser.value = { userId: '', roles: [] };
-            loadUsers();
-            loadAclInfo();
-        } else {
-            const error = await response.json();
-            showToast(error.detail || 'Failed to create user', 'danger');
-        }
+        showToast(`User ${newUser.value.userId} created successfully`, 'success');
+        newUser.value = { userId: '', roles: [] };
+        loadUsers();
+        loadAclInfo();
     } catch (error) {
-        showToast('Failed to create user', 'danger');
+        showToast(error.response?.data?.detail || 'Failed to create user', 'danger');
     }
 };
 
@@ -809,17 +796,10 @@ const deleteUser = async (userId) => {
                 role: 'destructive',
                 handler: async () => {
                     try {
-                        const response = await fetch(`${API_BASE}/api/acl/users/${userId}`, {
-                            method: 'DELETE',
-                        });
-
-                        if (response.ok) {
-                            showToast(`User ${userId} deleted`, 'success');
-                            loadUsers();
-                            loadAclInfo();
-                        } else {
-                            showToast('Failed to delete user', 'danger');
-                        }
+                        await apiService.deleteUser(userId);
+                        showToast(`User ${userId} deleted`, 'success');
+                        loadUsers();
+                        loadAclInfo();
                     } catch (error) {
                         showToast('Failed to delete user', 'danger');
                     }
@@ -849,21 +829,12 @@ const checkPermission = async () => {
     }
 
     try {
-        const response = await fetch(`${API_BASE}/api/acl/check`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                username: permCheck.value.userId,
-                topic: permCheck.value.topic,
-                action: permCheck.value.action,
-            }),
+        const response = await apiService.checkPermission({
+            username: permCheck.value.userId,
+            topic: permCheck.value.topic,
+            action: permCheck.value.action,
         });
-
-        if (response.ok) {
-            permCheckResult.value = await response.json();
-        } else {
-            showToast('Failed to check permission', 'danger');
-        }
+        permCheckResult.value = response.data;
     } catch (error) {
         showToast('Failed to check permission', 'danger');
     }

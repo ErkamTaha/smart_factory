@@ -52,6 +52,7 @@ from app.managers.db_mqtt_manager import (
     get_active_sessions,
 )
 from app.mqtt.client import get_mqtt_client
+from app.mqtt.user_client import get_user_mqtt_manager
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/mqtt", tags=["MQTT"])
@@ -486,26 +487,41 @@ async def update_command(
 # ============= SESSION ENDPOINTS =============
 
 
-@router.get("/sessions", response_model=SessionListResponse)
+@router.get("/sessions")
 async def get_mqtt_sessions(
-    active_only: bool = Query(True, description="Only return active sessions"),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get MQTT sessions"""
+    """Get MQTT sessions (in-memory live connections + persisted DB sessions)"""
     try:
-        if active_only:
-            sessions = await get_active_sessions(db)
-        else:
-            result = await db.execute(select(MQTTSession))
-            sessions = result.scalars().all()
+        sessions = []
 
-        return SessionListResponse(
-            sessions=[
-                SessionResponse(**s.to_dict(include_relationships=True))
-                for s in sessions
-            ],
-            count=len(sessions),
-        )
+        # In-memory live connections (source of truth for current connections)
+        mqtt_manager = get_user_mqtt_manager()
+        live_user_ids = set()
+        if mqtt_manager:
+            for i, entry in enumerate(mqtt_manager.get_active_users()):
+                live_user_ids.add(entry["user_id"])
+                sessions.append({
+                    "id": f"live_{entry['user_id']}",
+                    "user_id": entry["user_id"],
+                    "username": entry["user_id"],
+                    "client_id": f"smart_factory_user_{entry['user_id']}",
+                    "is_active": entry["is_connected"],
+                    "subscribed_topics": entry["subscribed_topics"],
+                    "connected_at": None,
+                    "disconnected_at": None,
+                    "ip_address": None,
+                    "last_activity": None,
+                })
+
+        # DB sessions — include those not already represented by a live connection
+        db_sessions = await get_active_sessions(db)
+        for s in db_sessions:
+            d = s.to_dict(include_relationships=True)
+            if d.get("username") not in live_user_ids:
+                sessions.append(d)
+
+        return {"sessions": sessions, "count": len(sessions)}
 
     except Exception as e:
         logger.error(f"Error getting sessions: {e}")

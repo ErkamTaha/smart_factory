@@ -90,7 +90,7 @@ const apiService = {
   // SS endpoints
   getSSInfo: () => api.get('/api/ss/info'),
   getAllSensors: (checkActiveness) => api.get('/api/ss/sensors', {
-    params: { checkActiveness }
+    params: { check_activeness: checkActiveness }
   }),
   addSensor: (sensor) => api.post('/api/ss/sensors', sensor),
   getSensor: (sensorId) => api.get(`/api/ss/sensors/${sensorId}`),

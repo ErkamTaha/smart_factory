@@ -5,7 +5,12 @@
                 <ion-buttons slot="start">
                     <ion-back-button color="light" default-href="/dashboard"></ion-back-button>
                 </ion-buttons>
-                <ion-title>ACL Management</ion-title>
+                <ion-title>
+                    <div class="toolbar-title">
+                        <ion-icon :icon="peopleOutline"></ion-icon>
+                        ACL Management
+                    </div>
+                </ion-title>
                 <ion-buttons slot="end">
                     <ion-button color="light" @click="refreshData" :disabled="isLoading" title="Refresh">
                         <ion-icon :icon="refreshOutline" slot="icon-only"></ion-icon>
@@ -321,7 +326,7 @@
                 </ion-header>
                 <ion-content class="ion-padding">
                     <ion-list v-if="activeSessions.length > 0" lines="full">
-                        <ion-item v-for="session in activeSessions" :key="session.id">
+                        <ion-item v-for="session in activeSessions" :key="session.id || session.user_id">
                             <div slot="start" class="item-avatar item-avatar-sm">
                                 {{ (session.username || session.client_id || '?').charAt(0).toUpperCase() }}
                             </div>
@@ -342,6 +347,22 @@
                 </ion-content>
             </ion-modal>
         </ion-content>
+
+        <!-- Toast notifications -->
+        <div class="toast-container">
+            <transition-group name="toast" tag="div" class="toast-stack">
+                <div v-for="toast in toasts" :key="toast.id"
+                    class="custom-toast" :class="`toast-${toast.color}`">
+                    <div class="toast-icon-wrap">
+                        <ion-icon :icon="toast.icon" class="toast-icon"></ion-icon>
+                    </div>
+                    <span class="toast-message">{{ toast.message }}</span>
+                    <button class="toast-close" @click="removeToast(toast.id)" aria-label="Dismiss">
+                        <ion-icon :icon="closeOutline"></ion-icon>
+                    </button>
+                </div>
+            </transition-group>
+        </div>
     </ion-page>
 </template>
 
@@ -352,12 +373,13 @@ import {
     IonBackButton, IonIcon, IonCard, IonCardContent, IonCardHeader, IonCardTitle,
     IonCardSubtitle, IonItem, IonLabel, IonInput, IonSelect, IonSelectOption,
     IonChip, IonList, IonSearchbar, IonSegment, IonSegmentButton, IonModal,
-    IonSpinner, alertController, toastController
+    IonSpinner, alertController
 } from '@ionic/vue';
 import {
     refreshOutline, shieldCheckmarkOutline, peopleOutline, personAddOutline,
     createOutline, eyeOutline, trashOutline, checkmarkCircleOutline,
-    closeCircleOutline, closeOutline, saveOutline
+    closeCircleOutline, closeOutline, saveOutline,
+    alertCircleOutline, warningOutline, informationCircleOutline
 } from 'ionicons/icons';
 import apiService from '@/services/api';
 
@@ -396,14 +418,18 @@ const isValidPermCheck = computed(() =>
 );
 
 // ── Helpers ─────────────────────────────────────────────────
-const showToast = async (message, color = 'primary') => {
-    const toast = await toastController.create({
-        message,
-        duration: 3000,
-        position: 'bottom',
-        cssClass: `app-toast app-toast-${color}`,
-    });
-    await toast.present();
+const toasts = ref([]);
+const removeToast = (id) => { toasts.value = toasts.value.filter(t => t.id !== id); };
+const showToast = (message, color = 'primary') => {
+    const iconMap = {
+        success: checkmarkCircleOutline,
+        danger: alertCircleOutline,
+        warning: warningOutline,
+        primary: informationCircleOutline,
+    };
+    const id = Date.now() + Math.random();
+    toasts.value.push({ id, message, color, icon: iconMap[color] || informationCircleOutline });
+    setTimeout(() => removeToast(id), 3500);
 };
 
 const formatTs = (ts) => ts ? new Date(ts).toLocaleString() : '—';
@@ -416,7 +442,7 @@ const loadACLInfo = async () => {
 
 const loadUsers = async () => {
     const response = await apiService.getAllUsers();
-    users.value = response.data || [];
+    users.value = (response.data || []).filter(u => u.is_active);
     filteredUsers.value = users.value;
 };
 
@@ -497,10 +523,10 @@ const deleteUser = async (username) => {
     try {
         await apiService.deleteUser(username);
         await Promise.all([loadUsers(), loadACLInfo()]);
-        await showToast('User deleted', 'success');
+        showToast('User deleted', 'success');
     } catch (err) {
         console.error('Delete failed:', err);
-        await showToast('Failed to delete user', 'danger');
+        showToast('Failed to delete user', 'danger');
     }
 };
 
@@ -553,6 +579,12 @@ onMounted(refreshData);
 </script>
 
 <style scoped>
+.toolbar-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 /* ── Stats card ──────────────────────────────────────────── */
 .stats-card {
   margin: 12px 16px 0;
@@ -678,4 +710,61 @@ onMounted(refreshData);
   flex-wrap: wrap;
   gap: 4px;
 }
+
+/* ── Toast notifications ──────────────────────────────────── */
+.toast-container {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 99999;
+  width: calc(100% - 48px);
+  max-width: 360px;
+  pointer-events: none;
+}
+.toast-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+}
+.custom-toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px 10px 10px;
+  border-radius: 40px;
+  background: rgba(22, 22, 26, 0.88);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 4px 28px rgba(0,0,0,0.30), 0 1px 6px rgba(0,0,0,0.18);
+  pointer-events: all;
+  width: 100%;
+  box-sizing: border-box;
+}
+.toast-primary { --toast-accent: #6eb4ff; --toast-glow: rgba(110,180,255,0.20); }
+.toast-success { --toast-accent: #4cd964; --toast-glow: rgba(76,217,100,0.20); }
+.toast-warning { --toast-accent: #ffd60a; --toast-glow: rgba(255,214,10,0.20); }
+.toast-danger  { --toast-accent: #ff453a; --toast-glow: rgba(255,69,58,0.20); }
+.toast-icon-wrap {
+  width: 30px; height: 30px; border-radius: 50%;
+  background: var(--toast-glow);
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.toast-icon { font-size: 16px; color: var(--toast-accent); }
+.toast-message {
+  flex: 1; font-size: 13.5px; font-weight: 500;
+  color: rgba(255,255,255,0.95); line-height: 1.35;
+}
+.toast-close {
+  background: none; border: none; padding: 4px; margin: 0; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  color: rgba(255,255,255,0.40); font-size: 16px; flex-shrink: 0;
+  border-radius: 50%; transition: color 0.15s;
+}
+.toast-close:hover { color: rgba(255,255,255,0.75); }
+.toast-enter-active { animation: toast-in 0.32s cubic-bezier(0.34,1.56,0.64,1) both; }
+.toast-leave-active { animation: toast-out 0.2s ease both; position: absolute; width: 100%; }
+@keyframes toast-in  { from { opacity:0; transform: translateY(20px) scale(0.94); } to { opacity:1; transform: translateY(0) scale(1); } }
+@keyframes toast-out { from { opacity:1; transform: scale(1); } to { opacity:0; transform: scale(0.92); } }
 </style>

@@ -11,8 +11,8 @@
                     <span class="toolbar-stat" title="Connected Users">
                         <ion-icon :icon="peopleOutline"></ion-icon>{{ activeUsers.length }}
                     </span>
-                    <span class="toolbar-stat" :class="{ 'toolbar-stat-alert': systemAlerts.length > 0 }" title="Alerts">
-                        <ion-icon :icon="alertCircleOutline"></ion-icon>{{ systemAlerts.length }}
+                    <span class="toolbar-stat" :class="{ 'toolbar-stat-alert': totalAlertCount > 0 }" title="Alerts">
+                        <ion-icon :icon="alertCircleOutline"></ion-icon>{{ totalAlertCount }}
                     </span>
                 </div>
                 <ion-buttons slot="end">
@@ -36,25 +36,6 @@
 
         <ion-content :fullscreen="true">
             <!-- System Alerts Banner -->
-            <div v-if="systemAlerts.length > 0" class="alerts-banner">
-                <ion-card v-for="alert in recentAlerts" :key="alert.id" :color="getAlertColor(alert.level)"
-                    class="alert-card">
-                    <ion-card-content>
-                        <div class="alert-header">
-                            <ion-icon :icon="getAlertIcon(alert.level)"></ion-icon>
-                            <span class="alert-level">{{ alert.level.toUpperCase() }}</span>
-                            <span class="alert-time">{{ formatTime(alert.timestamp) }}</span>
-                            <ion-button fill="clear" size="small" @click="dismissAlert(alert.id)">
-                                <ion-icon :icon="closeOutline"></ion-icon>
-                            </ion-button>
-                        </div>
-                        <p class="alert-message">{{ alert.message }}</p>
-                        <div v-if="alert.details" class="alert-details">
-                            <small>{{ JSON.stringify(alert.details, null, 2) }}</small>
-                        </div>
-                    </ion-card-content>
-                </ion-card>
-            </div>
 
             <!-- Loading State -->
             <div v-if="isLoading && !hasData" class="page-loading">
@@ -166,6 +147,9 @@
                                 <p v-if="ssInfo">{{ ssInfo.total_sensors }} sensors</p>
                                 <ion-chip :color="ssInfo ? 'success' : 'danger'" size="small">
                                     {{ ssInfo ? 'Active' : 'Inactive' }}
+                                </ion-chip>
+                                <ion-chip v-if="ssInfo && ssInfo.active_alerts > 0" color="danger" size="small">
+                                    {{ ssInfo.active_alerts }} active alert{{ ssInfo.active_alerts === 1 ? '' : 's' }}
                                 </ion-chip>
                                 <ion-button fill="outline" size="small" @click="openSSManagement" class="security-btn">
                                     Manage
@@ -466,7 +450,7 @@ const connectionStatusIcon = computed(() => {
 
 const deviceCount = computed(() => devices.value.length);
 const totalSensorReadings = computed(() => latestSensorData.value.length);
-const recentAlerts = computed(() => systemAlerts.value.slice(0, 3));
+const totalAlertCount = computed(() => systemAlerts.value.length + (ssInfo.value?.active_alerts ?? 0));
 
 // Per-device summary derived from latestSensorData
 const deviceSummaries = computed(() => {
@@ -545,6 +529,8 @@ const handleConnectionStatus = (data) => {
         requestSystemInfo();
         // Fetch historical sensor readings from DB
         fetchInitialSensorData();
+        // Fetch SS info via API for accurate active_alerts count
+        loadSSInfo();
         hasData.value = true;
     } else if (data.status === 'disconnected') {
         isConnected.value = false;
@@ -558,25 +544,19 @@ const handleConnectionStatus = (data) => {
 };
 
 const handleSystemAlert = (data) => {
-    const alert = {
+    systemAlerts.value.unshift({
         id: Date.now() + Math.random(),
         level: data.level,
         message: data.message,
-        details: data.details,
         timestamp: new Date().toISOString()
-    };
-
-    systemAlerts.value.unshift(alert);
-
-    // Keep only last 20 alerts
+    });
     if (systemAlerts.value.length > 20) {
         systemAlerts.value = systemAlerts.value.slice(0, 20);
     }
 
-    // Show toast for critical alerts
-    if (data.level === 'error' || data.level === 'critical') {
-        showToast(`${data.level.toUpperCase()}: ${data.message}`, 'danger');
-    }
+    // Show all system alerts as toasts
+    const colorMap = { error: 'danger', critical: 'danger', warning: 'warning', info: 'primary', success: 'success' };
+    showToast(data.message, colorMap[data.level] || 'primary');
 };
 
 const handleSensorData = (data) => {
@@ -714,6 +694,16 @@ const requestSystemInfo = () => {
     });
 };
 
+// Fetch SS info from REST API to keep active_alerts count fresh
+const loadSSInfo = async () => {
+    try {
+        const response = await apiService.getSSInfo();
+        ssInfo.value = response.data;
+    } catch (err) {
+        // Silently ignore — ss info is supplemental
+    }
+};
+
 // Fetch historical sensor readings from REST API
 const fetchInitialSensorData = async () => {
     try {
@@ -757,8 +747,8 @@ const fetchInitialSensorData = async () => {
     }
 };
 
-// WebSocket-based refresh that requests all current data
-const refreshData = () => {
+// Refresh data and reload ACL/SS configurations
+const refreshData = async () => {
     if (!isConnected.value) {
         showToast('Connect to WebSocket first', 'warning');
         return;
@@ -766,17 +756,32 @@ const refreshData = () => {
 
     isRefreshing.value = true;
 
-    // Request all data via WebSocket
+    // Request all live data via WebSocket
     requestSystemStatus();
     requestUsersList();
     requestSystemInfo();
 
-    // Also refresh historical sensor readings from DB
+    // Refresh historical sensor readings and SS info from REST API
     fetchInitialSensorData();
+    loadSSInfo();
+
+    // Reload ACL and SS configurations via REST API
+    try {
+        await apiService.reloadACL();
+        showToast('ACL config reloaded', 'success');
+    } catch (err) {
+        showToast('ACL reload failed', 'danger');
+    }
+
+    try {
+        await apiService.reloadSS();
+        showToast('SS config reloaded', 'success');
+    } catch (err) {
+        showToast('SS reload failed', 'danger');
+    }
 
     hasData.value = true;
 
-    // Brief visual feedback — data arrives async via WebSocket
     setTimeout(() => { isRefreshing.value = false; }, 800);
 };
 
@@ -938,29 +943,6 @@ const viewUserDetails = async (user) => {
 };
 
 // Utility Methods
-const dismissAlert = (alertId) => {
-    systemAlerts.value = systemAlerts.value.filter(alert => alert.id !== alertId);
-};
-
-const getAlertColor = (level) => {
-    switch (level) {
-        case 'error':
-        case 'critical': return 'danger';
-        case 'warning': return 'warning';
-        case 'info': return 'primary';
-        default: return 'medium';
-    }
-};
-
-const getAlertIcon = (level) => {
-    switch (level) {
-        case 'error':
-        case 'critical': return alertCircleOutline;
-        case 'warning': return warningOutline;
-        case 'info': return informationCircleOutline;
-        default: return informationCircleOutline;
-    }
-};
 
 const getSensorStatusColor = (reading) => {
     // You can implement logic based on sensor limits here
@@ -1125,46 +1107,6 @@ onUnmounted(() => {
 .connection-chip-connecting   { background: rgba(255, 196, 9, 0.30); }
 .connection-chip-disconnected { background: rgba(235, 68, 90, 0.60); }
 
-/* ── Alerts banner ───────────────────────────────────────── */
-.alerts-banner {
-  padding: 4px 0;
-}
-
-.alert-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
-}
-
-.alert-level {
-  font-weight: 700;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.alert-time {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.7);
-  margin-left: auto;
-}
-
-.alert-message {
-  margin: 0 0 6px;
-  font-weight: 500;
-  font-size: 14px;
-}
-
-.alert-details {
-  background: rgba(255, 255, 255, 0.15);
-  padding: 8px;
-  border-radius: 6px;
-  font-family: monospace;
-  font-size: 11px;
-  max-height: 80px;
-  overflow-y: auto;
-}
 
 /* ── Dashboard content: collapse Ionic card margins ─────── */
 .dashboard-content {

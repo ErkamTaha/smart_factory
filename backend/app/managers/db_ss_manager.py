@@ -367,7 +367,7 @@ class DatabaseSSManager:
 
                 limit = SSSensorLimit(
                     sensor_id=sensor.id,
-                    name=limit_dict.get("name", "default"),
+                    name=limit_dict.get("name") or "default",
                     upper_limit=float(limit_dict["upper_limit"]),
                     lower_limit=float(limit_dict["lower_limit"]),
                     unit=limit_dict["unit"],
@@ -460,7 +460,7 @@ class DatabaseSSManager:
 
                     new_limit = SSSensorLimit(
                         sensor_id=sensor.id,
-                        name=limit_dict.get("name", "default"),
+                        name=limit_dict.get("name") or "default",
                         upper_limit=float(limit_dict["upper_limit"]),
                         lower_limit=float(limit_dict["lower_limit"]),
                         unit=limit_dict["unit"],

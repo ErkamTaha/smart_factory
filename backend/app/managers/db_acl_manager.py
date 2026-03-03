@@ -410,10 +410,12 @@ class DatabaseACLManager:
             return None
 
     async def get_all_users(self, db: AsyncSession) -> List[Dict]:
-        """Get all users"""
+        """Get all active users"""
         try:
             result = await db.execute(
-                select(ACLUser).options(selectinload(ACLUser.roles))
+                select(ACLUser)
+                .where(ACLUser.is_active == True)
+                .options(selectinload(ACLUser.roles))
             )
             users = result.scalars().all()
 

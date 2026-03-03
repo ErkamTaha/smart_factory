@@ -5,7 +5,12 @@
                 <ion-buttons slot="start">
                     <ion-back-button color="light" default-href="/dashboard"></ion-back-button>
                 </ion-buttons>
-                <ion-title>Sensor Security</ion-title>
+                <ion-title>
+                    <div class="toolbar-title">
+                        <ion-icon :icon="shieldCheckmarkOutline"></ion-icon>
+                        Sensor Security
+                    </div>
+                </ion-title>
                 <ion-buttons slot="end">
                     <ion-button color="light" title="Refresh" @click="refreshData" :disabled="isLoading">
                         <ion-icon :icon="refreshOutline" slot="icon-only"></ion-icon>
@@ -56,7 +61,7 @@
             </ion-card>
 
             <!-- Tabs for Sensors and Alerts -->
-            <ion-segment v-model="activeTab" @ion-change="onSegmentChange">
+            <ion-segment v-model="activeTab" class="tab-segment" @ion-change="onSegmentChange">
                 <ion-segment-button value="sensors">
                     <ion-label>Sensors</ion-label>
                 </ion-segment-button>
@@ -76,32 +81,44 @@
                         <ion-card-title>Add New Sensor</ion-card-title>
                     </ion-card-header>
                     <ion-card-content>
-                        <ion-grid>
+                        <!-- Row 1: Sensor ID + Sensor Type -->
+                        <ion-grid class="form-grid">
                             <ion-row>
                                 <ion-col size="12" size-md="6">
                                     <ion-item>
                                         <ion-input v-model="newSensor.sensorId" label="Sensor ID"
-                                            placeholder="e.g., temp_sensor_01" label-placement="stacked"></ion-input>
+                                            placeholder="e.g., temp_sensor_01"
+                                            label-placement="stacked"
+                                            @ion-input="onNewSensorIdInput"></ion-input>
                                     </ion-item>
                                 </ion-col>
                                 <ion-col size="12" size-md="6">
                                     <ion-item>
-                                        <ion-input v-model="newSensor.pattern" label="Topic Pattern"
-                                            placeholder="e.g., sf/sensors/temp_sensor_01"
-                                            label-placement="stacked"></ion-input>
+                                        <ion-select v-model="newSensor.sensorType" label="Sensor Type"
+                                            placeholder="Select type" label-placement="stacked"
+                                            interface="popover">
+                                            <ion-select-option v-for="type in sensorTypeOptions" :key="type" :value="type">
+                                                {{ type }}
+                                            </ion-select-option>
+                                        </ion-select>
                                     </ion-item>
                                 </ion-col>
                             </ion-row>
+
+                            <!-- Row 2: Topic Pattern + Active -->
                             <ion-row>
-                                <ion-col size="12" size-md="4">
+                                <ion-col size="12" size-md="9">
                                     <ion-item>
-                                        <ion-input v-model="newSensor.sensorType" label="Sensor Type"
-                                            placeholder="e.g., temperature" label-placement="stacked"></ion-input>
+                                        <ion-input v-model="newSensor.pattern" label="Topic Pattern"
+                                            label-placement="stacked"
+                                            :helper-text="patternAutoFilled ? 'Auto-generated — edit to customise' : 'Custom pattern'"
+                                            @ion-input="patternAutoFilled = false"></ion-input>
                                     </ion-item>
                                 </ion-col>
-                                <ion-col size="12" size-md="4">
-                                    <ion-item>
-                                        <ion-toggle v-model="newSensor.is_active">Active</ion-toggle>
+                                <ion-col size="12" size-md="3" class="toggle-col">
+                                    <ion-item lines="none">
+                                        <ion-label>Active</ion-label>
+                                        <ion-toggle v-model="newSensor.is_active" slot="end"></ion-toggle>
                                     </ion-item>
                                 </ion-col>
                             </ion-row>
@@ -110,54 +127,60 @@
                         <!-- Sensor Limits Configuration -->
                         <div class="limits-section">
                             <h4>Sensor Limits</h4>
-                            <ion-grid>
-                                <ion-row v-for="(limit, index) in newSensor.limits" :key="index">
-                                    <ion-col size="12" size-md="3">
-                                        <ion-item>
-                                            <ion-input :value="limit.name" label="Limit Name"
-                                                label-placement="stacked"></ion-input>
-                                        </ion-item>
-                                    </ion-col>
-                                    <ion-col size="6" size-md="2">
-                                        <ion-item>
-                                            <ion-input v-model="limit.upper_limit" type="number" label="Upper Limit"
-                                                label-placement="stacked"></ion-input>
-                                        </ion-item>
-                                    </ion-col>
-                                    <ion-col size="6" size-md="2">
-                                        <ion-item>
-                                            <ion-input v-model="limit.lower_limit" type="number" label="Lower Limit"
-                                                label-placement="stacked"></ion-input>
-                                        </ion-item>
-                                    </ion-col>
-                                    <ion-col size="6" size-md="2">
-                                        <ion-item>
-                                            <ion-input v-model="limit.unit" label="Unit" placeholder="e.g., C"
-                                                label-placement="stacked"></ion-input>
-                                        </ion-item>
-                                    </ion-col>
-                                    <ion-col size="6" size-md="2">
-                                        <ion-item>
-                                            <ion-toggle v-model="limit.is_selected">Selected</ion-toggle>
-                                        </ion-item>
-                                    </ion-col>
-                                    <ion-col size="12" size-md="1">
-                                        <ion-button fill="clear" color="danger" @click="removeLimitConfig(index)">
-                                            <ion-icon :icon="trashOutline"></ion-icon>
-                                        </ion-button>
-                                    </ion-col>
-                                </ion-row>
-                            </ion-grid>
+                            <div v-for="(limit, index) in newSensor.limits" :key="index" class="limit-edit">
+                                <ion-grid>
+                                    <ion-row>
+                                        <ion-col size="12" size-md="3">
+                                            <ion-item>
+                                                <ion-input v-model="limit.name" label="Name"
+                                                    placeholder="e.g., normal" label-placement="stacked"></ion-input>
+                                            </ion-item>
+                                        </ion-col>
+                                        <ion-col size="6" size-md="2">
+                                            <ion-item>
+                                                <ion-input v-model.number="limit.upper_limit" type="number"
+                                                    label="Upper" label-placement="stacked"></ion-input>
+                                            </ion-item>
+                                        </ion-col>
+                                        <ion-col size="6" size-md="2">
+                                            <ion-item>
+                                                <ion-input v-model.number="limit.lower_limit" type="number"
+                                                    label="Lower" label-placement="stacked"></ion-input>
+                                            </ion-item>
+                                        </ion-col>
+                                        <ion-col size="6" size-md="2">
+                                            <ion-item>
+                                                <ion-select v-model="limit.unit" label="Unit"
+                                                    placeholder="Select" label-placement="stacked"
+                                                    interface="popover">
+                                                    <ion-select-option v-for="unit in getUnitOptionsWithCurrent(newSensor.sensorType, limit.unit)" :key="unit" :value="unit">
+                                                        {{ unit }}
+                                                    </ion-select-option>
+                                                </ion-select>
+                                            </ion-item>
+                                        </ion-col>
+                                        <ion-col size="4" size-md="2">
+                                            <ion-item lines="none">
+                                                <ion-label>Selected</ion-label>
+                                                <ion-toggle v-model="limit.is_selected" slot="end"></ion-toggle>
+                                            </ion-item>
+                                        </ion-col>
+                                        <ion-col size="2" size-md="1" class="del-col">
+                                            <ion-button fill="clear" color="danger" @click="removeLimitConfig(index)">
+                                                <ion-icon :icon="trashOutline"></ion-icon>
+                                            </ion-button>
+                                        </ion-col>
+                                    </ion-row>
+                                </ion-grid>
+                            </div>
                             <ion-button @click="addLimitConfig" fill="outline" size="small">
                                 <ion-icon :icon="addOutline" slot="start"></ion-icon>
-                                Add Limit Configuration
+                                Add Limit
                             </ion-button>
                         </div>
-                        <div v-if="addError" class="inline-error">
-                            {{ addError }}
-                        </div>
-                        <ion-button @click="createSensor" :disabled="!isValidNewSensor"
-                            class="ion-margin-top">
+
+                        <div v-if="addError" class="inline-error">{{ addError }}</div>
+                        <ion-button @click="createSensor" :disabled="!isValidNewSensor" class="ion-margin-top">
                             <ion-icon :icon="addCircleOutline" slot="start"></ion-icon>
                             Add Sensor
                         </ion-button>
@@ -326,7 +349,6 @@
                                 </ion-button>
                             </ion-item>
                         </ion-list>
-                        <p v-if="resolveError" class="error-text">{{ resolveError }}</p>
                     </ion-card-content>
                 </ion-card>
 
@@ -361,18 +383,22 @@
                 <!-- Sensor Types Configuration -->
                 <ion-card>
                     <ion-card-header>
-                        <ion-card-title>Sensor Types</ion-card-title>
+                        <ion-card-title>Sensor Types ({{ Object.keys(sensorTypes).length }})</ion-card-title>
                     </ion-card-header>
                     <ion-card-content>
-                        <ion-list>
-                            <ion-item v-for="(typeData, typeName) in sensorTypes" :key="typeName">
-                                <ion-label>
-                                    <h3>Name: {{ typeName }}</h3>
-                                    <p>Description: {{ typeData.description || 'No description' }}</p>
-                                    <p>Properties: {{ typeData.properties }}</p>
-                                </ion-label>
-                            </ion-item>
-                        </ion-list>
+                        <div class="type-grid">
+                            <div v-for="(typeData, typeName) in sensorTypes" :key="typeName" class="type-card">
+                                <div class="type-card-header">
+                                    <span class="type-name">{{ typeName.charAt(0).toUpperCase() + typeName.slice(1) }}</span>
+                                </div>
+                                <p class="type-desc">{{ typeData.description || 'No description' }}</p>
+                                <div v-if="typeData.properties?.common_units?.length" class="type-units">
+                                    <span v-for="unit in typeData.properties.common_units" :key="unit" class="unit-chip">
+                                        {{ unit }}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
                     </ion-card-content>
                 </ion-card>
             </div>
@@ -394,17 +420,27 @@
                     <div v-if="editingSensor">
                         <ion-list>
                             <ion-item>
-                                <ion-input v-model="editingSensor.pattern" label="Pattern"
+                                <ion-input v-model="editingSensor.sensor_id" label="Sensor ID"
+                                    label-placement="stacked" readonly></ion-input>
+                            </ion-item>
+
+                            <ion-item>
+                                <ion-select v-model="editingSensor.sensor_type" label="Sensor Type"
+                                    label-placement="stacked" interface="popover">
+                                    <ion-select-option v-for="type in sensorTypeOptions" :key="type" :value="type">
+                                        {{ type }}
+                                    </ion-select-option>
+                                </ion-select>
+                            </ion-item>
+
+                            <ion-item>
+                                <ion-input v-model="editingSensor.pattern" label="Topic Pattern"
                                     label-placement="stacked"></ion-input>
                             </ion-item>
 
                             <ion-item>
-                                <ion-input v-model="editingSensor.sensor_type" label="Sensor Type"
-                                    label-placement="stacked"></ion-input>
-                            </ion-item>
-
-                            <ion-item>
-                                <ion-toggle v-model="editingSensor.is_active">Active</ion-toggle>
+                                <ion-label>Active</ion-label>
+                                <ion-toggle v-model="editingSensor.is_active" slot="end"></ion-toggle>
                             </ion-item>
                         </ion-list>
 
@@ -413,54 +449,50 @@
                             <h4>Sensor Limits</h4>
 
                             <div v-for="(limit, index) in editingSensor.limits" :key="index" class="limit-edit">
-                                <ion-grid>
+                                <!-- Header: name + delete -->
+                                <div class="limit-edit-header">
+                                    <ion-item class="limit-name-item" lines="none">
+                                        <ion-input v-model="limit.name" label="Limit Name"
+                                            placeholder="e.g., normal" label-placement="stacked"></ion-input>
+                                    </ion-item>
+                                    <ion-button fill="clear" color="danger" size="small"
+                                        @click="removeEditLimitConfig(index)">
+                                        <ion-icon :icon="trashOutline"></ion-icon>
+                                    </ion-button>
+                                </div>
+                                <!-- Values row -->
+                                <ion-grid class="limit-grid">
                                     <ion-row>
-
-                                        <!-- Name -->
-                                        <ion-col size="3">
-                                            <ion-item>
-                                                <ion-input v-model="limit.name" label="Name"
-                                                    label-placement="stacked"></ion-input>
-                                            </ion-item>
-                                        </ion-col>
-
-                                        <!-- Upper Limit -->
-                                        <ion-col size="2">
+                                        <ion-col size="6">
                                             <ion-item>
                                                 <ion-input v-model.number="limit.upper_limit" type="number"
                                                     label="Upper" label-placement="stacked"></ion-input>
                                             </ion-item>
                                         </ion-col>
-
-                                        <!-- Lower Limit -->
-                                        <ion-col size="2">
+                                        <ion-col size="6">
                                             <ion-item>
                                                 <ion-input v-model.number="limit.lower_limit" type="number"
                                                     label="Lower" label-placement="stacked"></ion-input>
                                             </ion-item>
                                         </ion-col>
-
-                                        <!-- Unit -->
-                                        <ion-col size="2">
+                                    </ion-row>
+                                    <ion-row>
+                                        <ion-col size="6">
                                             <ion-item>
-                                                <ion-input v-model="limit.unit" label="Unit"
-                                                    label-placement="stacked"></ion-input>
+                                                <ion-select v-model="limit.unit" label="Unit"
+                                                    placeholder="Select" label-placement="stacked"
+                                                    interface="popover">
+                                                    <ion-select-option v-for="unit in getUnitOptionsWithCurrent(editingSensor.sensor_type, limit.unit)" :key="unit" :value="unit">
+                                                        {{ unit }}
+                                                    </ion-select-option>
+                                                </ion-select>
                                             </ion-item>
                                         </ion-col>
-
-                                        <!-- is_selected -->
-                                        <ion-col size="2">
-                                            <ion-item>
-                                                <ion-toggle v-model="limit.is_selected">Selected</ion-toggle>
+                                        <ion-col size="6">
+                                            <ion-item lines="none">
+                                                <ion-label>Selected</ion-label>
+                                                <ion-toggle v-model="limit.is_selected" slot="end"></ion-toggle>
                                             </ion-item>
-                                        </ion-col>
-
-                                        <!-- Delete -->
-                                        <ion-col size="1">
-                                            <ion-button fill="clear" color="danger"
-                                                @click="removeEditLimitConfig(index)">
-                                                <ion-icon :icon="trashOutline"></ion-icon>
-                                            </ion-button>
                                         </ion-col>
                                     </ion-row>
                                 </ion-grid>
@@ -658,6 +690,22 @@
             </ion-modal>
 
         </ion-content>
+
+        <!-- Toast notifications -->
+        <div class="toast-container">
+            <transition-group name="toast" tag="div" class="toast-stack">
+                <div v-for="toast in toasts" :key="toast.id"
+                    class="custom-toast" :class="`toast-${toast.color}`">
+                    <div class="toast-icon-wrap">
+                        <ion-icon :icon="toast.icon" class="toast-icon"></ion-icon>
+                    </div>
+                    <span class="toast-message">{{ toast.message }}</span>
+                    <button class="toast-close" @click="removeToast(toast.id)" aria-label="Dismiss">
+                        <ion-icon :icon="closeOutline"></ion-icon>
+                    </button>
+                </div>
+            </transition-group>
+        </div>
     </ion-page>
 </template>
 
@@ -668,13 +716,14 @@ import {
     IonBackButton, IonIcon, IonCard, IonCardContent, IonCardHeader, IonCardTitle,
     IonGrid, IonRow, IonCol, IonItem, IonLabel, IonInput, IonSelect, IonSelectOption,
     IonChip, IonList, IonSearchbar, IonSegment, IonSegmentButton, IonModal,
-    IonToggle, alertController, toastController
+    IonToggle, alertController
 } from '@ionic/vue';
 
 import {
     refreshOutline, shieldCheckmarkOutline, warningOutline, addCircleOutline,
     createOutline, eyeOutline, trashOutline, checkmarkCircleOutline,
-    closeOutline, saveOutline, addOutline, downloadOutline, checkmarkDoneOutline, banOutline
+    closeOutline, saveOutline, addOutline, downloadOutline, checkmarkDoneOutline, banOutline,
+    alertCircleOutline, informationCircleOutline
 } from 'ionicons/icons';
 
 import apiService from '@/services/api';
@@ -725,7 +774,6 @@ const selectedAlert = ref(null);
 
 const addError = ref('');
 const updateError = ref('');
-const resolveError = ref('');
 
 const alertTest = ref({
     sensorId: '',
@@ -735,10 +783,51 @@ const alertTest = ref({
 
 const alertTestResult = ref(null);
 
+// Auto-generate topic pattern from sensor ID
+const patternAutoFilled = ref(true);
+watch(() => newSensor.value.sensorId, (id) => {
+    if (patternAutoFilled.value) {
+        newSensor.value.pattern = id ? `sf/sensors/${id}` : '';
+    }
+});
+const onNewSensorIdInput = () => {
+    // Allow auto-fill to run via the watch; if pattern was manually set, preserve it
+};
+
 // Computed
 const activeSensors = computed(() => {
     return sensors.value.filter(s => s.is_active).length;
 });
+
+const sensorTypeOptions = computed(() => Object.keys(sensorTypes.value));
+
+const SENSOR_UNIT_MAP = {
+    temperature: ['°C', '°F', 'K'],
+    humidity:    ['%', 'g/m³'],
+    pressure:    ['hPa', 'Pa', 'bar', 'psi', 'atm'],
+    motion:      ['count', 'm/s', 'cm/s', 'km/h', 'mph'],
+    light:       ['lux', 'cd/m²'],
+    sound:       ['dB', 'dBA'],
+    gas:         ['ppm', 'ppb', '%'],
+    power:       ['V', 'mV', 'A', 'mA', 'W', 'kW'],
+    distance:    ['m', 'cm', 'mm', 'in', 'ft'],
+    speed:       ['m/s', 'km/h', 'mph'],
+};
+const COMMON_UNITS = ['°C', '°F', '%', 'hPa', 'Pa', 'm/s', 'km/h', 'lux', 'dB', 'ppm', 'V', 'A', 'W', 'm', 'cm', 'boolean'];
+
+const getUnitOptions = (sensorType) => {
+    if (!sensorType) return COMMON_UNITS;
+    return SENSOR_UNIT_MAP[sensorType.toLowerCase()] || COMMON_UNITS;
+};
+
+// Always include the already-saved unit value so it's visible even if it predates the dropdown
+const getUnitOptionsWithCurrent = (sensorType, currentUnit) => {
+    const options = getUnitOptions(sensorType);
+    if (currentUnit && !options.includes(currentUnit)) {
+        return [currentUnit, ...options];
+    }
+    return options;
+};
 
 const activeAlerts = computed(() => {
     if (!alerts.value) return [];
@@ -789,23 +878,18 @@ watch(addSelectedLimitsCount, (newCount) => {
 });
 
 // Methods
-const showToast = async (message, color = 'primary') => {
-    const toast = await toastController.create({
-        message,
-        duration: 3000,
-        color,
-        position: 'bottom'
-    });
-    await toast.present();
-};
-
-const showAlert = async (header, message) => {
-    const alert = await alertController.create({
-        header,
-        message,
-        buttons: ['OK']
-    });
-    await alert.present();
+const toasts = ref([]);
+const removeToast = (id) => { toasts.value = toasts.value.filter(t => t.id !== id); };
+const showToast = (message, color = 'primary') => {
+    const iconMap = {
+        success: checkmarkCircleOutline,
+        danger: alertCircleOutline,
+        warning: warningOutline,
+        primary: informationCircleOutline,
+    };
+    const id = Date.now() + Math.random();
+    toasts.value.push({ id, message, color, icon: iconMap[color] || informationCircleOutline });
+    setTimeout(() => removeToast(id), 3500);
 };
 
 // Data loading methods
@@ -905,9 +989,9 @@ const createSensor = async () => {
                 lower_limit: '',
                 unit: '',
                 is_selected: true
-            }
-            ]
+            }]
         };
+        patternAutoFilled.value = true;
 
         await loadSensors();
         await loadSSInfo();
@@ -918,18 +1002,18 @@ const createSensor = async () => {
 };
 
 const editSensor = (sensor) => {
-    editingSensor.value = { ...sensor };
-    // Ensure limits is an object
-    if (!editingSensor.value.limits) {
-        editingSensor.value.limits = [{
-            name: '',
-            upper_limit: '',
-            lower_limit: '',
-            unit: '',
-            is_selected: true
-        }
-        ];
-    }
+    // Deep-clone limits so edits don't mutate the sensors list
+    const limits = (sensor.limits && sensor.limits.length)
+        ? sensor.limits.map(l => ({
+            ...l,
+            name: l.name || 'default',
+            unit: l.unit ?? '',
+            upper_limit: l.upper_limit ?? '',
+            lower_limit: l.lower_limit ?? '',
+        }))
+        : [{ name: '', upper_limit: '', lower_limit: '', unit: '', is_selected: true }];
+
+    editingSensor.value = { ...sensor, limits };
     showEditModal.value = true;
 };
 
@@ -961,26 +1045,25 @@ const updateSensor = async () => {
 const deleteSensor = async (sensorId) => {
     const alert = await alertController.create({
         header: 'Delete Sensor',
-        message: `Are you sure you want to delete sensor "${sensorId}"?`,
+        message: `Delete "${sensorId}"? This cannot be undone.`,
         buttons: [
             { text: 'Cancel', role: 'cancel' },
-            {
-                text: 'Delete',
-                role: 'destructive',
-                handler: async () => {
-                    try {
-                        await apiService.deleteSensor(sensorId);
-                        await loadSensors();
-                        await loadSSInfo();
-                        showToast('Sensor deleted successfully', 'success');
-                    } catch (err) {
-                        showToast('Failed to delete sensor', 'danger');
-                    }
-                }
-            }
+            { text: 'Delete', role: 'destructive' },
         ]
     });
     await alert.present();
+
+    const { role } = await alert.onDidDismiss();
+    if (role !== 'destructive') return;
+
+    try {
+        await apiService.deleteSensor(sensorId);
+        await loadSensors();
+        await loadSSInfo();
+        showToast('Sensor deleted successfully', 'success');
+    } catch (err) {
+        showToast('Failed to delete sensor', 'danger');
+    }
 };
 
 const viewSensorDetails = (sensor) => {
@@ -1036,7 +1119,6 @@ const addEditLimitConfig = () => {
             unit: '',
             is_selected: false
         };
-        console.log(editingSensor.value.limits);
     }
 };
 
@@ -1068,11 +1150,27 @@ const resolveAlert = async (alert) => {
         if (alert.is_resolved) return;
         const response = await apiService.resolveAlert(alert.id);
         if (response.data) {
+            // Update alert details modal ref
+            if (selectedAlert.value?.id === alert.id) {
+                selectedAlert.value = { ...selectedAlert.value, is_resolved: true, resolved_at: new Date().toISOString() };
+            }
+            // Update sensor details modal alerts list
+            if (selectedSensor.value?.alerts) {
+                const idx = selectedSensor.value.alerts.findIndex(a => a.id === alert.id);
+                if (idx >= 0) {
+                    selectedSensor.value.alerts[idx] = {
+                        ...selectedSensor.value.alerts[idx],
+                        is_resolved: true,
+                        resolved_at: new Date().toISOString()
+                    };
+                }
+            }
             loadSensors();
             loadAlerts();
+            showToast('Alert resolved', 'success');
         }
     } catch (err) {
-        resolveError.value = 'Failed to resolve alert';
+        showToast('Failed to resolve alert', 'danger');
     }
 };
 
@@ -1081,11 +1179,27 @@ const revertAlert = async (alert) => {
         if (!alert.is_resolved) return;
         const response = await apiService.revertAlert(alert.id);
         if (response.data) {
+            // Update alert details modal ref
+            if (selectedAlert.value?.id === alert.id) {
+                selectedAlert.value = { ...selectedAlert.value, is_resolved: false, resolved_at: null };
+            }
+            // Update sensor details modal alerts list
+            if (selectedSensor.value?.alerts) {
+                const idx = selectedSensor.value.alerts.findIndex(a => a.id === alert.id);
+                if (idx >= 0) {
+                    selectedSensor.value.alerts[idx] = {
+                        ...selectedSensor.value.alerts[idx],
+                        is_resolved: false,
+                        resolved_at: null
+                    };
+                }
+            }
             loadSensors();
             loadAlerts();
+            showToast('Alert reverted', 'success');
         }
     } catch (err) {
-        resolveError.value = 'Failed to resolve alert';
+        showToast('Failed to revert alert', 'danger');
     }
 };
 
@@ -1136,16 +1250,6 @@ const exportConfig = () => {
     linkElement.click();
 
     showToast('Configuration exported', 'success');
-};
-
-const getAlertColor = (level) => {
-    switch (level) {
-        case 'error':
-        case 'critical': return 'danger';
-        case 'warning': return 'warning';
-        case 'info': return 'primary';
-        default: return 'medium';
-    }
 };
 
 const formatDateTime = (timestamp) => {
@@ -1202,9 +1306,25 @@ onMounted(() => {
 
 .limit-edit {
   margin-bottom: 10px;
-  padding: 12px;
+  padding: 8px 12px 12px;
   background: white;
   border-radius: 8px;
+}
+
+.limit-edit-header {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.limit-name-item {
+  flex: 1;
+  --padding-start: 0;
+  --inner-padding-end: 0;
+}
+
+.limit-grid {
+  padding: 0;
 }
 
 .alert-result .result-header {
@@ -1232,4 +1352,130 @@ onMounted(() => {
   font-family: monospace;
   font-size: 13px;
 }
+
+.type-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.type-card {
+  background: var(--ion-color-light);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
+.type-card-header {
+  margin-bottom: 6px;
+}
+
+.type-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ion-color-dark);
+}
+
+.type-desc {
+  font-size: 12px;
+  color: var(--ion-color-medium);
+  margin: 0 0 8px;
+  line-height: 1.4;
+}
+
+.type-units {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.unit-chip {
+  font-size: 11px;
+  background: var(--ion-color-primary);
+  color: #ffffff;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-weight: 500;
+}
+
+.toolbar-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tab-segment {
+  margin: 10px 16px 0;
+}
+
+.form-grid {
+  padding: 0;
+}
+
+.toggle-col {
+  display: flex;
+  align-items: center;
+}
+
+.del-col {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── Toast notifications ──────────────────────────────────── */
+.toast-container {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 99999;
+  width: calc(100% - 48px);
+  max-width: 360px;
+  pointer-events: none;
+}
+.toast-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+}
+.custom-toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px 10px 10px;
+  border-radius: 40px;
+  background: rgba(22, 22, 26, 0.88);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 4px 28px rgba(0,0,0,0.30), 0 1px 6px rgba(0,0,0,0.18);
+  pointer-events: all;
+  width: 100%;
+  box-sizing: border-box;
+}
+.toast-primary { --toast-accent: #6eb4ff; --toast-glow: rgba(110,180,255,0.20); }
+.toast-success { --toast-accent: #4cd964; --toast-glow: rgba(76,217,100,0.20); }
+.toast-warning { --toast-accent: #ffd60a; --toast-glow: rgba(255,214,10,0.20); }
+.toast-danger  { --toast-accent: #ff453a; --toast-glow: rgba(255,69,58,0.20); }
+.toast-icon-wrap {
+  width: 30px; height: 30px; border-radius: 50%;
+  background: var(--toast-glow);
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.toast-icon { font-size: 16px; color: var(--toast-accent); }
+.toast-message {
+  flex: 1; font-size: 13.5px; font-weight: 500;
+  color: rgba(255,255,255,0.95); line-height: 1.35;
+}
+.toast-close {
+  background: none; border: none; padding: 4px; margin: 0; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  color: rgba(255,255,255,0.40); font-size: 16px; flex-shrink: 0;
+  border-radius: 50%; transition: color 0.15s;
+}
+.toast-close:hover { color: rgba(255,255,255,0.75); }
+.toast-enter-active { animation: toast-in 0.32s cubic-bezier(0.34,1.56,0.64,1) both; }
+.toast-leave-active { animation: toast-out 0.2s ease both; position: absolute; width: 100%; }
+@keyframes toast-in  { from { opacity:0; transform: translateY(20px) scale(0.94); } to { opacity:1; transform: translateY(0) scale(1); } }
+@keyframes toast-out { from { opacity:1; transform: scale(1); } to { opacity:0; transform: scale(0.92); } }
 </style>
