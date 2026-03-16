@@ -557,6 +557,9 @@ const handleSystemAlert = (data) => {
     // Show all system alerts as toasts
     const colorMap = { error: 'danger', critical: 'danger', warning: 'warning', info: 'primary', success: 'success' };
     showToast(data.message, colorMap[data.level] || 'primary');
+
+    // Re-fetch SS info so toolbar alert count stays in sync
+    loadSSInfo();
 };
 
 const handleSensorData = (data) => {
@@ -643,13 +646,19 @@ const handleSystemStatus = (data) => {
 
 const handleSystemInfo = (data) => {
     console.log('Received system info:', data);
-    // This would need to be implemented on the backend
-    // For now, we'll handle ACL and SS info when available
     if (data.acl_info) {
         aclInfo.value = data.acl_info;
     }
     if (data.ss_info) {
-        ssInfo.value = data.ss_info;
+        // Only use WebSocket ss_info if REST hasn't loaded yet;
+        // REST active_alerts count is authoritative (queries DB directly).
+        if (!ssInfo.value) {
+            ssInfo.value = data.ss_info;
+        } else {
+            // Merge non-alert fields but keep REST alert count
+            const currentAlerts = ssInfo.value.active_alerts;
+            ssInfo.value = { ...data.ss_info, active_alerts: currentAlerts };
+        }
     }
 };
 
