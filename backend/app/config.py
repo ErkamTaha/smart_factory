@@ -2,9 +2,9 @@
 Configuration settings for Smart Factory Backend
 """
 
-import os
-from typing import List
+from typing import List, Optional
 from pydantic_settings import BaseSettings
+from pydantic import field_validator
 from datetime import timedelta
 
 
@@ -14,56 +14,63 @@ class Settings(BaseSettings):
     APP_NAME: str = "Smart Factory"
     HOST: str = "0.0.0.0"
     PORT: int = 8000
-    ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
-    DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
-    LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
+    ENVIRONMENT: str = "development"
+    DEBUG: bool = False
+    LOG_LEVEL: str = "INFO"
 
-    # Database
-    DATABASE_URL: str = os.getenv(
-        "DATABASE_URL",
-        "postgresql+asyncpg://smartfactory:password123@localhost:5432/smartfactory",
-    )
+    # Database (no default — must be provided via .env or environment)
+    DATABASE_URL: str
 
     # MQTT/EMQX Configuration
-    MQTT_BROKER_HOST: str = os.getenv("MQTT_BROKER_HOST", "localhost")
-    MQTT_BROKER_PORT: int = int(os.getenv("MQTT_BROKER_PORT", "1883"))
+    MQTT_BROKER_HOST: str = "localhost"
+    MQTT_BROKER_PORT: int = 1883
     MQTT_DEFAULT_QOS: int = 1
     MQTT_TOPIC_PREFIX: str = "sf"
-    MQTT_TLS_ENABLED: bool = os.getenv("MQTT_TLS_ENABLED", "false").lower() == "true"
+    MQTT_TLS_ENABLED: bool = False
     MQTT_CA_CERTS: str = "/app/certs/ca.crt"
-    MQTT_USERNAME: str = os.getenv("MQTT_USERNAME", "smartfactory")
-    MQTT_PASSWORD: str = os.getenv("MQTT_PASSWORD", "mqtt123")
+    MQTT_USERNAME: str
+    MQTT_PASSWORD: str
 
     # EMQX HTTP API Configuration
-    EMQX_API_URL: str = os.getenv("EMQX_API_URL", "http://localhost:18083")
-    EMQX_API_KEY: str = os.getenv("EMQX_API_KEY", "admin")
-    EMQX_API_SECRET: str = os.getenv("EMQX_API_SECRET", "smartfactory_admin_2024")
+    EMQX_API_URL: str = "http://localhost:18083"
+    EMQX_API_KEY: str
+    EMQX_API_SECRET: str
 
     # Redis
-    REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379")
-    REDIS_PASSWORD: str = os.getenv("REDIS_PASSWORD", "redis123")
+    REDIS_URL: str = "redis://localhost:6379"
+    REDIS_PASSWORD: str
 
     # CORS
-    allowed_origins: List[str] = [
-        "http://localhost:3000",
-        "http://localhost:5173",
-        "http://localhost:8080",
-        "http://127.0.0.1:3000",
-        "http://0.0.0.0:3000",
-    ]
+    ALLOWED_ORIGINS: str = "http://localhost:3000,http://localhost:5173,http://localhost:8080"
 
-    # Security
-    SECRET_KEY: str = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
-    ALGORITHM: str = os.getenv("ALGORITHM", "HS256")
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(
-        os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30")
-    )
-    ACCESS_TOKEN_EXPIRE: timedelta = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    @property
+    def allowed_origins(self) -> List[str]:
+        return [origin.strip() for origin in self.ALLOWED_ORIGINS.split(",")]
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
-        extra = "ignore"  # Ignore extra environment variables
+    # Security (no defaults for secrets — must be provided)
+    SECRET_KEY: str
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+
+    @property
+    def ACCESS_TOKEN_EXPIRE(self) -> timedelta:
+        return timedelta(minutes=self.ACCESS_TOKEN_EXPIRE_MINUTES)
+
+    @field_validator("SECRET_KEY")
+    @classmethod
+    def secret_key_must_be_strong(cls, v: str) -> str:
+        if v in ("your-secret-key-change-in-production", "changeme", "secret"):
+            raise ValueError(
+                "SECRET_KEY must be changed from the placeholder value. "
+                "Generate one with: python -c \"import secrets; print(secrets.token_urlsafe(64))\""
+            )
+        return v
+
+    model_config = {
+        "env_file": ".env",
+        "case_sensitive": True,
+        "extra": "ignore",
+    }
 
 
 settings = Settings()

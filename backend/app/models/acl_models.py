@@ -132,8 +132,8 @@ class ACLUserRole(Base):
     assigned_at = Column(DateTime(timezone=True), server_default=func.now())
     assigned_by = Column(String(100))  # Who assigned this role
 
-    user = relationship("ACLUser")
-    role = relationship("ACLRole")
+    user = relationship("ACLUser", overlaps="roles,users")
+    role = relationship("ACLRole", overlaps="roles,users")
 
     def to_dict(self, include_relationships=True):
         result = {
@@ -274,13 +274,15 @@ async def create_default_roles(db):
 
 async def create_default_acl_users(db):
     """Create default ACL users"""
+    from app.security.auth_security import hash_password
+
     default_users = [
-        {"username": "alice", "roles": ["admin"]},
-        {"username": "bob", "roles": ["operator"]},
-        {"username": "charlie", "roles": ["viewer", "operator"]},
-        {"username": "dave", "roles": ["device_owner"]},
-        {"username": "eve", "roles": ["device_owner"]},
-        {"username": "erkam", "roles": ["admin"]},
+        {"username": "alice", "password": "alice123", "roles": ["admin"], "is_superuser": True},
+        {"username": "bob", "password": "bob123", "roles": ["operator"]},
+        {"username": "charlie", "password": "charlie123", "roles": ["viewer", "operator"]},
+        {"username": "dave", "password": "dave123", "roles": ["device_owner"]},
+        {"username": "eve", "password": "eve123", "roles": ["device_owner"]},
+        {"username": "erkam", "password": "erkam123", "roles": ["admin"], "is_superuser": True},
     ]
 
     for user_data in default_users:
@@ -293,16 +295,21 @@ async def create_default_acl_users(db):
             continue
 
         # Create user
-        user = ACLUser(username=user_data["username"], is_active=True)
+        user = ACLUser(
+            username=user_data["username"],
+            hashed_password=hash_password(user_data["password"]),
+            is_active=True,
+            is_superuser=user_data.get("is_superuser", False),
+        )
         db.add(user)
         await db.flush()  # Get generated ID
 
-        # Assign roles
+        # Assign roles via junction table to avoid lazy-load in async
         for role_name in user_data["roles"]:
             result = await db.execute(select(ACLRole).where(ACLRole.name == role_name))
             role = result.scalars().first()
             if role:
-                user.roles.append(role)
+                db.add(ACLUserRole(user_id=user.id, role_id=role.id))
 
     # Custom permissions — Bob
     result = await db.execute(select(ACLUser).where(ACLUser.username == "bob"))

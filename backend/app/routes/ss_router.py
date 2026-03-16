@@ -10,6 +10,8 @@ from app.database import get_db
 from app.managers.db_ss_manager import get_ss_manager
 from app.websocket.manager import get_websocket_manager
 from app.schemas.ss_schemas import AddSensor, UpdateSensor, AlertCheck, SensorLimit
+from app.routes.auth_router import get_current_user, get_current_superuser
+from app.models.acl_models import ACLUser
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/ss", tags=["SS Management"])
@@ -17,7 +19,10 @@ router = APIRouter(prefix="/api/ss", tags=["SS Management"])
 
 # SS Information Endpoints
 @router.get("/info")
-async def get_ss_info(db: AsyncSession = Depends(get_db)):
+async def get_ss_info(
+    current_user: ACLUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     """Get SS configuration information"""
     try:
         ss = get_ss_manager()
@@ -33,7 +38,9 @@ async def get_ss_info(db: AsyncSession = Depends(get_db)):
 
 @router.get("/sensors")
 async def get_all_sensors(
-    check_activeness: bool = True, db: AsyncSession = Depends(get_db)
+    check_activeness: bool = True,
+    current_user: ACLUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get list of all sensors in SS"""
     try:
@@ -49,7 +56,11 @@ async def get_all_sensors(
 
 
 @router.get("/sensors/{sensor_id}")
-async def get_sensor(sensor_id: str, db: AsyncSession = Depends(get_db)):
+async def get_sensor(
+    sensor_id: str,
+    current_user: ACLUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     """Get specific sensor's SS information"""
     try:
         ss = get_ss_manager()
@@ -71,7 +82,10 @@ async def get_sensor(sensor_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/types")
-async def get_all_sensor_types(db: AsyncSession = Depends(get_db)):
+async def get_all_sensor_types(
+    current_user: ACLUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     """Get all sensor types"""
     try:
         ss = get_ss_manager()
@@ -87,7 +101,11 @@ async def get_all_sensor_types(db: AsyncSession = Depends(get_db)):
 
 # Alert Check Endpoint
 @router.post("/check")
-async def check_alert(check: AlertCheck, db: AsyncSession = Depends(get_db)):
+async def check_alert(
+    check: AlertCheck,
+    current_user: ACLUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     """Check sensor data for alert"""
     try:
         ss = get_ss_manager()
@@ -103,16 +121,17 @@ async def check_alert(check: AlertCheck, db: AsyncSession = Depends(get_db)):
 
         if alert_triggered:
             ws_manager = get_websocket_manager()
-            await ws_manager.broadcast_system_alert(
-                "warning",
-                f"Sensor data from sensor {check.sensor_id} is outside of limits",
-                {
-                    "sensor_id": check.sensor_id,
-                    "value": check.value,
-                    "unit": check.unit,
-                    "alert_type": alert_type,
-                },
-            )
+            if ws_manager:
+                await ws_manager.broadcast_system_alert(
+                    "warning",
+                    f"Sensor data from sensor {check.sensor_id} is outside of limits",
+                    {
+                        "sensor_id": check.sensor_id,
+                        "value": check.value,
+                        "unit": check.unit,
+                        "alert_type": alert_type,
+                    },
+                )
 
         return {
             "sensor_id": check.sensor_id,
@@ -129,7 +148,11 @@ async def check_alert(check: AlertCheck, db: AsyncSession = Depends(get_db)):
 
 # Sensor Management Endpoints
 @router.post("/sensors")
-async def add_sensor(sensor: AddSensor, db: AsyncSession = Depends(get_db)):
+async def add_sensor(
+    sensor: AddSensor,
+    current_user: ACLUser = Depends(get_current_superuser),
+    db: AsyncSession = Depends(get_db),
+):
     """Add a new sensor to SS"""
     ss = get_ss_manager()
     if not ss:
@@ -163,7 +186,10 @@ async def add_sensor(sensor: AddSensor, db: AsyncSession = Depends(get_db)):
 
 @router.put("/sensors/{sensor_id}")
 async def update_sensor(
-    sensor_id: str, update: UpdateSensor, db: AsyncSession = Depends(get_db)
+    sensor_id: str,
+    update: UpdateSensor,
+    current_user: ACLUser = Depends(get_current_superuser),
+    db: AsyncSession = Depends(get_db),
 ):
     """Update sensor"""
     ss = get_ss_manager()
@@ -197,7 +223,11 @@ async def update_sensor(
 
 
 @router.delete("/sensors/{sensor_id}")
-async def delete_sensor(sensor_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_sensor(
+    sensor_id: str,
+    current_user: ACLUser = Depends(get_current_superuser),
+    db: AsyncSession = Depends(get_db),
+):
     """Remove sensor from SS"""
     ss = get_ss_manager()
     if not ss:
@@ -218,7 +248,10 @@ async def delete_sensor(sensor_id: str, db: AsyncSession = Depends(get_db)):
 
 # SS Reload Endpoint
 @router.post("/reload")
-async def reload_ss(db: AsyncSession = Depends(get_db)):
+async def reload_ss(
+    current_user: ACLUser = Depends(get_current_superuser),
+    db: AsyncSession = Depends(get_db),
+):
     """Manually trigger SS configuration reload"""
     ss = get_ss_manager()
     if not ss:
@@ -239,7 +272,10 @@ async def reload_ss(db: AsyncSession = Depends(get_db)):
 # Alerts Endpoints
 @router.get("/alerts")
 async def get_alerts(
-    limit: int = 0, include_resolved: bool = True, db: AsyncSession = Depends(get_db)
+    limit: int = 0,
+    include_resolved: bool = True,
+    current_user: ACLUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get recent alerts"""
     ss = get_ss_manager()
@@ -255,7 +291,11 @@ async def get_alerts(
 
 
 @router.post("/alerts/{alert_id}/resolve")
-async def resolve_alert(alert_id: int, db: AsyncSession = Depends(get_db)):
+async def resolve_alert(
+    alert_id: int,
+    current_user: ACLUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     """Mark an alert as resolved"""
     ss = get_ss_manager()
     if not ss:
@@ -275,7 +315,11 @@ async def resolve_alert(alert_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/alerts/{alert_id}/revert")
-async def revert_alert(alert_id: int, db: AsyncSession = Depends(get_db)):
+async def revert_alert(
+    alert_id: int,
+    current_user: ACLUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     """Revert an alert"""
     ss = get_ss_manager()
     if not ss:

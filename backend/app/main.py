@@ -73,6 +73,32 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"❌ Failed to initialize SS manager: {e}")
 
+    # Initialize EMQX Auth Manager (before MQTT so we can register the system user)
+    emqx_auth = None
+    try:
+        logger.info("🔐 Initializing EMQX Auth Manager...")
+        emqx_auth = init_emqx_auth_manager(
+            api_url=settings.EMQX_API_URL,
+            api_key=settings.EMQX_API_KEY,
+            api_secret=settings.EMQX_API_SECRET,
+        )
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize EMQX Auth manager: {e}")
+
+    # Verify EMQX connection and register system MQTT user
+    if emqx_auth and await emqx_auth.verify_connection():
+        logger.info("✅ EMQX API connected successfully")
+        # Ensure the system MQTT user exists in EMQX
+        success, msg = await emqx_auth.create_mqtt_user(
+            settings.MQTT_USERNAME, settings.MQTT_PASSWORD, is_superuser=True
+        )
+        if success:
+            logger.info(f"✅ System MQTT user registered in EMQX: {msg}")
+        else:
+            logger.warning(f"⚠️  Could not register system MQTT user: {msg}")
+    else:
+        logger.warning("⚠️  EMQX API connection failed - MQTT auth may not work")
+
     # Initialize MQTT clients
     ws_manager = get_websocket_manager()
     try:
@@ -106,24 +132,6 @@ async def lifespan(app: FastAPI):
         logger.info("✅ Per-user MQTT manager initialized")
     except Exception as e:
         logger.error(f"❌ Failed to initialize per-user MQTT manager: {e}")
-
-    # Initialize EMQX Auth Manager
-    emqx_auth = None
-    try:
-        logger.info("🔐 Initializing EMQX Auth Manager...")
-        emqx_auth = init_emqx_auth_manager(
-            api_url=settings.EMQX_API_URL,
-            api_key=settings.EMQX_API_KEY,
-            api_secret=settings.EMQX_API_SECRET,
-        )
-    except Exception as e:
-        logger.error(f"❌ Failed to initialize EMQX Auth manager: {e}")
-
-    # Verify EMQX connection
-    if emqx_auth and await emqx_auth.verify_connection():
-        logger.info("✅ EMQX API connected successfully")
-    else:
-        logger.warning("⚠️  EMQX API connection failed - MQTT auth may not work")
 
     logger.info("🎉 Smart Factory Backend started successfully!")
 

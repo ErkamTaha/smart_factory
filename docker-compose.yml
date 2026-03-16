@@ -7,7 +7,7 @@ services:
     environment:
       POSTGRES_DB: smartfactory
       POSTGRES_USER: smartfactory
-      POSTGRES_PASSWORD: password123
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       POSTGRES_INITDB_ARGS: "--encoding=UTF-8"
     ports:
       - "5432:5432"
@@ -46,14 +46,24 @@ services:
 
       # Dashboard credentials
       - EMQX_DASHBOARD__DEFAULT_USERNAME=admin
-      - EMQX_DASHBOARD__DEFAULT_PASSWORD=smartfactory_admin_2024
+      - EMQX_DASHBOARD__DEFAULT_PASSWORD=${EMQX_DASHBOARD_PASSWORD:?Set EMQX_DASHBOARD_PASSWORD in .env}
 
       # Security settings
       - EMQX_ALLOW_ANONYMOUS=false
 
       # Node name
       - EMQX_NODE__NAME=emqx@smartfactory_emqx
-      - EMQX_NODE__COOKIE=secret_cookie
+      - EMQX_NODE__COOKIE=${EMQX_NODE_COOKIE:?Set EMQX_NODE_COOKIE in .env}
+
+      # Bootstrap API keys for programmatic access
+      - EMQX_API_KEY__BOOTSTRAP_FILE=/opt/emqx/data/bootstrap_api_keys.txt
+
+      # Built-in database authentication
+      - EMQX_AUTHENTICATION__1__MECHANISM=password_based
+      - EMQX_AUTHENTICATION__1__BACKEND=built_in_database
+      - EMQX_AUTHENTICATION__1__USER_ID_TYPE=username
+      - EMQX_AUTHENTICATION__1__PASSWORD_HASH_ALGORITHM__NAME=bcrypt
+      - EMQX_AUTHENTICATION__1__PASSWORD_HASH_ALGORITHM__SALT_ROUNDS=10
 
       # Log level
       - EMQX_LOG__CONSOLE__LEVEL=info
@@ -67,6 +77,7 @@ services:
       - ./certs/ca.crt:/opt/emqx/etc/certs/ca.crt
       - ./certs/server.crt:/opt/emqx/etc/certs/server.crt
       - ./certs/server.key:/opt/emqx/etc/certs/server.key
+      - ./infrastructure/emqx/bootstrap_api_keys.txt:/opt/emqx/data/bootstrap_api_keys.txt:ro
     networks:
       - smartfactory_net
     healthcheck:
@@ -87,9 +98,9 @@ services:
       - redis_data:/data
     networks:
       - smartfactory_net
-    command: redis-server --appendonly yes --requirepass redis123
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
     healthcheck:
-      test: [ "CMD", "redis-cli", "--raw", "incr", "ping" ]
+      test: [ "CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping" ]
       interval: 10s
       timeout: 3s
       retries: 3
@@ -106,20 +117,23 @@ services:
       - "8000:8000"
     environment:
       # Database
-      - DATABASE_URL=postgresql+asyncpg://smartfactory:password123@postgres:5432/smartfactory
+      - DATABASE_URL=postgresql+asyncpg://smartfactory:${POSTGRES_PASSWORD}@postgres:5432/smartfactory
 
       # MQTT/EMQX Configuration
       - MQTT_BROKER_HOST=emqx
       - MQTT_BROKER_PORT=8883
       - MQTT_TLS_ENABLED=true
+      - MQTT_USERNAME=${MQTT_USERNAME:?Set MQTT_USERNAME in .env}
+      - MQTT_PASSWORD=${MQTT_PASSWORD:?Set MQTT_PASSWORD in .env}
 
       # EMQX HTTP API Configuration
       - EMQX_API_URL=http://emqx:18083
-      - EMQX_API_KEY=admin
-      - EMQX_API_SECRET=smartfactory_admin_2024
+      - EMQX_API_KEY=${EMQX_API_KEY:?Set EMQX_API_KEY in .env}
+      - EMQX_API_SECRET=${EMQX_API_SECRET:?Set EMQX_API_SECRET in .env}
 
       # Redis
       - REDIS_URL=redis://redis:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
 
       # Application
       - ENVIRONMENT=development
@@ -127,7 +141,7 @@ services:
       - LOG_LEVEL=INFO
 
       # Security
-      - SECRET_KEY=your-secret-key-change-in-production
+      - SECRET_KEY=${SECRET_KEY:?Set SECRET_KEY in .env}
       - ALGORITHM=HS256
       - ACCESS_TOKEN_EXPIRE_MINUTES=30
     volumes:
@@ -186,7 +200,7 @@ services:
     restart: unless-stopped
     environment:
       PGADMIN_DEFAULT_EMAIL: admin@smartfactory.com
-      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:?Set PGADMIN_PASSWORD in .env}
       PGADMIN_CONFIG_SERVER_MODE: 'False'
     ports:
       - "5050:80"

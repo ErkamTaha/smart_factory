@@ -765,19 +765,22 @@ const refreshData = async () => {
     fetchInitialSensorData();
     loadSSInfo();
 
-    // Reload ACL and SS configurations via REST API
+    // Reload ACL and SS configurations via REST API (superuser only)
     try {
         await apiService.reloadACL();
-        showToast('ACL config reloaded', 'success');
     } catch (err) {
-        showToast('ACL reload failed', 'danger');
+        // Silently ignore 403 — only superusers can reload configs
+        if (err?.response?.status !== 403) {
+            showToast('ACL reload failed', 'danger');
+        }
     }
 
     try {
         await apiService.reloadSS();
-        showToast('SS config reloaded', 'success');
     } catch (err) {
-        showToast('SS reload failed', 'danger');
+        if (err?.response?.status !== 403) {
+            showToast('SS reload failed', 'danger');
+        }
     }
 
     hasData.value = true;

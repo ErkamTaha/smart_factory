@@ -1,15 +1,40 @@
 # app/security/mqtt_credentials.py
+import base64
+import hashlib
 import secrets
 import logging
 from typing import Tuple, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timezone
 
+from cryptography.fernet import Fernet, InvalidToken
+
 from app.routes.auth_router import get_user_by_username
-from app.security.auth_security import hash_password, verify_password
 from app.mqtt.emqx_auth import get_emqx_auth_manager
+from app.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+def _get_fernet() -> Fernet:
+    """Derive a Fernet key from SECRET_KEY."""
+    key = hashlib.sha256(settings.SECRET_KEY.encode()).digest()
+    return Fernet(base64.urlsafe_b64encode(key))
+
+
+def _encrypt_password(plaintext: str) -> str:
+    """Encrypt an MQTT password for database storage."""
+    return _get_fernet().encrypt(plaintext.encode()).decode()
+
+
+def _decrypt_password(stored: str) -> str:
+    """Decrypt an MQTT password from database storage.
+    Falls back to treating as plaintext for legacy rows."""
+    try:
+        return _get_fernet().decrypt(stored.encode()).decode()
+    except (InvalidToken, Exception):
+        # Legacy plaintext — return as-is
+        return stored
 
 
 class MQTTCredentialManager:
@@ -44,7 +69,12 @@ class MQTTCredentialManager:
         if user.mqtt_username and user.mqtt_password and not force_regenerate:
             # User has existing credentials
             logger.info(f"Using existing MQTT credentials for user {user_id}")
-            return user.mqtt_username, user.mqtt_password
+            plaintext = _decrypt_password(user.mqtt_password)
+            # Re-encrypt legacy plaintext rows on first read
+            if plaintext == user.mqtt_password:
+                user.mqtt_password = _encrypt_password(plaintext)
+                await db.commit()
+            return user.mqtt_username, plaintext
 
         else:
             # Create new credentials
@@ -56,7 +86,7 @@ class MQTTCredentialManager:
 
             # Store in database
             user.mqtt_username = mqtt_username
-            user.mqtt_password = mqtt_password
+            user.mqtt_password = _encrypt_password(mqtt_password)
             user.mqtt_created_at = datetime.now(timezone.utc)
             user.mqtt_updated_at = datetime.now(timezone.utc)
             await db.commit()

@@ -123,7 +123,7 @@ async def websocket_endpoint(websocket: WebSocket, db: AsyncSession = Depends(ge
 
             try:
                 message = json.loads(data)
-                await handle_user_message(user_id, message, user_mqtt_client, websocket, db)
+                await handle_user_message(user_id, message, user_mqtt_client, websocket, db, user)
             except json.JSONDecodeError:
                 logger.warning(f"User {user_id} sent invalid JSON: {data}")
                 await websocket.send_text(
@@ -156,7 +156,7 @@ async def websocket_endpoint(websocket: WebSocket, db: AsyncSession = Depends(ge
 
 
 async def handle_user_message(
-    user_id: str, message: dict, mqtt_client, websocket: WebSocket, db: AsyncSession
+    user_id: str, message: dict, mqtt_client, websocket: WebSocket, db: AsyncSession, user=None
 ):
     """Handle messages from user's WebSocket"""
     message_type = message.get("type")
@@ -251,6 +251,12 @@ async def handle_user_message(
 
     elif message_type == "get_all_users":
         # Get list of all connected users (admin feature)
+        if not user or not user.is_superuser:
+            await websocket.send_text(
+                json.dumps({"type": "error", "message": "Superuser access required"})
+            )
+            return
+
         manager = get_user_mqtt_manager()
         if manager:
             active_users = manager.get_active_users()
@@ -285,7 +291,13 @@ async def handle_user_message(
         await websocket.send_text(json.dumps(system_info))
 
     elif message_type == "reload_acl":
-        # Reload ACL configuration
+        # Reload ACL configuration (superuser only)
+        if not user or not user.is_superuser:
+            await websocket.send_text(
+                json.dumps({"type": "error", "message": "Superuser access required"})
+            )
+            return
+
         from app.managers.db_acl_manager import get_acl_manager
 
         acl_mgr = get_acl_manager()
@@ -308,7 +320,13 @@ async def handle_user_message(
             )
 
     elif message_type == "reload_ss":
-        # Reload SS configuration
+        # Reload SS configuration (superuser only)
+        if not user or not user.is_superuser:
+            await websocket.send_text(
+                json.dumps({"type": "error", "message": "Superuser access required"})
+            )
+            return
+
         from app.managers.db_ss_manager import get_ss_manager
 
         ss_mgr = get_ss_manager()

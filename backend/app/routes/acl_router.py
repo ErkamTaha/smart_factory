@@ -12,6 +12,8 @@ from app.managers.db_acl_manager import get_acl_manager
 from app.mqtt.user_client import get_user_mqtt_manager
 from app.schemas.acl_schemas import PermissionCheck, Permission, UserCreate, UserUpdate
 from app.security.auth_security import hash_password
+from app.routes.auth_router import get_current_user, get_current_superuser
+from app.models.acl_models import ACLUser
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/acl", tags=["ACL Management"])
@@ -19,7 +21,10 @@ router = APIRouter(prefix="/api/acl", tags=["ACL Management"])
 
 # ACL Information Endpoints
 @router.get("/info")
-async def get_acl_info(db: AsyncSession = Depends(get_db)):
+async def get_acl_info(
+    current_user: ACLUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     """Get ACL configuration information"""
     acl = get_acl_manager()
     if not acl:
@@ -34,7 +39,10 @@ async def get_acl_info(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/users")
-async def get_all_users(db: AsyncSession = Depends(get_db)):
+async def get_all_users(
+    current_user: ACLUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     """Get list of all users in ACL"""
     acl = get_acl_manager()
     if not acl:
@@ -49,7 +57,11 @@ async def get_all_users(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/users/{username}")
-async def get_user(username: str, db: AsyncSession = Depends(get_db)):
+async def get_user(
+    username: str,
+    current_user: ACLUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     """Get specific user's ACL information"""
     acl = get_acl_manager()
     if not acl:
@@ -70,7 +82,10 @@ async def get_user(username: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/roles")
-async def get_all_roles(db: AsyncSession = Depends(get_db)):
+async def get_all_roles(
+    current_user: ACLUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     """Get list of all available roles"""
     acl = get_acl_manager()
     if not acl:
@@ -86,7 +101,11 @@ async def get_all_roles(db: AsyncSession = Depends(get_db)):
 
 # Permission Check Endpoint
 @router.post("/check")
-async def check_permission(check: PermissionCheck, db: AsyncSession = Depends(get_db)):
+async def check_permission(
+    check: PermissionCheck,
+    current_user: ACLUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     """Check if user has permission for action on topic"""
     acl = get_acl_manager()
     if not acl:
@@ -114,7 +133,11 @@ async def check_permission(check: PermissionCheck, db: AsyncSession = Depends(ge
 
 # User Management Endpoints
 @router.post("/users")
-async def create_user(user: UserCreate, db: AsyncSession = Depends(get_db)):
+async def create_user(
+    user: UserCreate,
+    current_user: ACLUser = Depends(get_current_superuser),
+    db: AsyncSession = Depends(get_db),
+):
     """Add a new user to ACL"""
     acl = get_acl_manager()
     if not acl:
@@ -146,7 +169,10 @@ async def create_user(user: UserCreate, db: AsyncSession = Depends(get_db)):
 
 @router.put("/users/{username}")
 async def update_user(
-    username: str, update: UserUpdate, db: AsyncSession = Depends(get_db)
+    username: str,
+    update: UserUpdate,
+    current_user: ACLUser = Depends(get_current_superuser),
+    db: AsyncSession = Depends(get_db),
 ):
     """Update user's roles or permissions"""
     acl = get_acl_manager()
@@ -202,7 +228,11 @@ async def update_user(
 
 
 @router.delete("/users/{username}")
-async def delete_user(username: str, db: AsyncSession = Depends(get_db)):
+async def delete_user(
+    username: str,
+    current_user: ACLUser = Depends(get_current_superuser),
+    db: AsyncSession = Depends(get_db),
+):
     """Remove user from ACL"""
     acl = get_acl_manager()
     if not acl:
@@ -228,7 +258,10 @@ async def delete_user(username: str, db: AsyncSession = Depends(get_db)):
 
 @router.post("/users/{username}/permissions")
 async def add_user_permission(
-    username: str, permission: Permission, db: AsyncSession = Depends(get_db)
+    username: str,
+    permission: Permission,
+    current_user: ACLUser = Depends(get_current_superuser),
+    db: AsyncSession = Depends(get_db),
 ):
     """Add custom permission to user"""
     acl = get_acl_manager()
@@ -256,7 +289,10 @@ async def add_user_permission(
 
 # ACL Reload Endpoint
 @router.post("/reload")
-async def reload_acl(db: AsyncSession = Depends(get_db)):
+async def reload_acl(
+    current_user: ACLUser = Depends(get_current_superuser),
+    db: AsyncSession = Depends(get_db),
+):
     """Manually trigger ACL configuration reload"""
     acl = get_acl_manager()
     if not acl:

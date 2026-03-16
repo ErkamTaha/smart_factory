@@ -107,7 +107,8 @@ class UserMQTTClient:
         # Broadcast system alert with global websocket client
         ws = get_websocket_manager()
         if not ws:
-            logger.warning("Websocket manager not avaliable, can't broadcast alert.")
+            logger.warning("Websocket manager not available, can't broadcast alert.")
+            return
         await ws.broadcast_system_alert(level, message, details)
 
     def _on_connect(self, client, userdata, flags, rc):

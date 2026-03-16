@@ -60,18 +60,12 @@
                 </ion-card-content>
             </ion-card>
 
-            <!-- Tabs for Sensors and Alerts -->
-            <ion-segment v-model="activeTab" class="tab-segment" @ion-change="onSegmentChange">
-                <ion-segment-button value="sensors">
-                    <ion-label>Sensors</ion-label>
-                </ion-segment-button>
-                <ion-segment-button value="alerts">
-                    <ion-label>Alerts</ion-label>
-                </ion-segment-button>
-                <ion-segment-button value="config">
-                    <ion-label>Configuration</ion-label>
-                </ion-segment-button>
-            </ion-segment>
+            <!-- Tabs -->
+            <div class="custom-tabs">
+                <button :class="['custom-tab', { active: activeTab === 'sensors' }]" @click="activeTab = 'sensors'">Sensors</button>
+                <button :class="['custom-tab', { active: activeTab === 'alerts' }]" @click="activeTab = 'alerts'">Alerts</button>
+                <button :class="['custom-tab', { active: activeTab === 'config' }]" @click="activeTab = 'config'">Configuration</button>
+            </div>
 
             <!-- Sensors Tab -->
             <div v-show="activeTab === 'sensors'">
@@ -715,7 +709,7 @@ import {
     IonPage, IonHeader, IonToolbar, IonTitle, IonContent, IonButtons, IonButton,
     IonBackButton, IonIcon, IonCard, IonCardContent, IonCardHeader, IonCardTitle,
     IonGrid, IonRow, IonCol, IonItem, IonLabel, IonInput, IonSelect, IonSelectOption,
-    IonChip, IonList, IonSearchbar, IonSegment, IonSegmentButton, IonModal,
+    IonChip, IonList, IonSearchbar, IonModal,
     IonToggle, alertController
 } from '@ionic/vue';
 
@@ -1216,10 +1210,9 @@ const filterSensors = () => {
     }
 };
 
-const onSegmentChange = (event) => {
-    activeTab.value = event.detail.value;
-    alertTestResult.value = null; // Reset alert test result when switching tabs
-};
+watch(activeTab, () => {
+    alertTestResult.value = null;
+});
 
 const reloadSS = async () => {
     try {

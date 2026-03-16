@@ -3,8 +3,10 @@ Authentication API routes with database integration
 """
 
 import logging
+import time
 import traceback
-from fastapi import APIRouter, HTTPException, Depends, status
+from collections import defaultdict
+from fastapi import APIRouter, HTTPException, Depends, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 
@@ -23,10 +25,33 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
+# --- In-memory rate limiter for auth endpoints ---
+_rate_limit_store: dict[str, list[float]] = defaultdict(list)
+_RATE_LIMIT_WINDOW = 60  # seconds
+_RATE_LIMIT_MAX_REQUESTS = 10  # max attempts per window
+
+
+def _check_rate_limit(key: str) -> None:
+    """Raise 429 if key has exceeded the rate limit."""
+    now = time.monotonic()
+    # Prune expired entries
+    _rate_limit_store[key] = [
+        t for t in _rate_limit_store[key] if now - t < _RATE_LIMIT_WINDOW
+    ]
+    if len(_rate_limit_store[key]) >= _RATE_LIMIT_MAX_REQUESTS:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many requests. Please try again later.",
+        )
+    _rate_limit_store[key].append(now)
+
 
 @router.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
-async def register(user_in: UserCreate, db: AsyncSession = Depends(get_db)):
+async def register(request: Request, user_in: UserCreate, db: AsyncSession = Depends(get_db)):
     """Register a new user"""
+    client_ip = request.client.host if request.client else "unknown"
+    _check_rate_limit(f"register:{client_ip}")
+
     auth = get_auth_manager()
     if not auth:
         raise HTTPException(
@@ -78,10 +103,14 @@ async def register(user_in: UserCreate, db: AsyncSession = Depends(get_db)):
 
 @router.post("/login", response_model=Token)
 async def login(
+    request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = Depends(get_db),
 ):
     """Login with username and password to get access token"""
+    client_ip = request.client.host if request.client else "unknown"
+    _check_rate_limit(f"login:{client_ip}")
+
     auth = get_auth_manager()
     if not auth:
         raise HTTPException(

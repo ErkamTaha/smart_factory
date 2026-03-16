@@ -26,7 +26,7 @@ class EMQXAuthManager:
         logger.info(f"EMQXAuthManager initialized with API URL: {self.api_url}")
 
     async def create_mqtt_user(
-        self, mqtt_username: str, mqtt_password: str
+        self, mqtt_username: str, mqtt_password: str, is_superuser: bool = False
     ) -> Tuple[bool, str]:
         """
         Create or update MQTT user in EMQX
@@ -41,7 +41,7 @@ class EMQXAuthManager:
                     json={
                         "user_id": mqtt_username,
                         "password": mqtt_password,
-                        "is_superuser": False,  # Regular user, not admin
+                        "is_superuser": is_superuser,
                     },
                     auth=(self.api_key, self.api_secret),
                     timeout=10.0,

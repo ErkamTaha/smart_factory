@@ -11,7 +11,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 import logging
 
-from fastapi.security import OAuth2PasswordBearer
+from app.routes.auth_router import get_current_user
+from app.models.acl_models import ACLUser
 
 from app.models.mqtt_models import (
     MQTTDevice,
@@ -56,7 +57,6 @@ from app.mqtt.user_client import get_user_mqtt_manager
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/mqtt", tags=["MQTT"])
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 
 # ============= DEVICE ENDPOINTS =============
@@ -65,46 +65,54 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 @router.get("/devices", response_model=DeviceListResponse)
 async def get_devices(
     active_only: bool = Query(True, description="Only return active devices"),
+    current_user: ACLUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Get list of all devices with statistics"""
     try:
-        devices = await get_all_devices(db, active_only=active_only)
+        # Build subqueries to avoid N+1
+        reading_count_sq = (
+            select(
+                MQTTSensorReading.device_id,
+                func.count(MQTTSensorReading.id).label("reading_count"),
+                func.max(MQTTSensorReading.timestamp).label("latest_reading"),
+            )
+            .group_by(MQTTSensorReading.device_id)
+            .subquery()
+        )
+        cmd_count_sq = (
+            select(
+                MQTTCommand.device_id,
+                func.count(MQTTCommand.id).label("command_count"),
+            )
+            .group_by(MQTTCommand.device_id)
+            .subquery()
+        )
+
+        query = (
+            select(
+                MQTTDevice,
+                func.coalesce(reading_count_sq.c.reading_count, 0).label("reading_count"),
+                reading_count_sq.c.latest_reading,
+                func.coalesce(cmd_count_sq.c.command_count, 0).label("command_count"),
+            )
+            .outerjoin(reading_count_sq, MQTTDevice.id == reading_count_sq.c.device_id)
+            .outerjoin(cmd_count_sq, MQTTDevice.id == cmd_count_sq.c.device_id)
+        )
+        if active_only:
+            query = query.where(MQTTDevice.is_active == True)
+
+        result = await db.execute(query)
+        rows = result.all()
+
         device_list = []
-
-        for device in devices:
-            # Get latest reading
-            latest_query = await db.execute(
-                select(MQTTSensorReading)
-                .where(MQTTSensorReading.device_id == device.id)
-                .order_by(MQTTSensorReading.timestamp.desc())
-                .limit(1)
-            )
-            latest = latest_query.scalars().first()
-
-            # Get reading count
-            count_query = await db.execute(
-                select(func.count(MQTTSensorReading.id)).where(
-                    MQTTSensorReading.device_id == device.id
-                )
-            )
-            reading_count = count_query.scalar()
-
-            # Get command count
-            cmd_count_query = await db.execute(
-                select(func.count(MQTTCommand.id)).where(
-                    MQTTCommand.device_id == device.id
-                )
-            )
-            command_count = cmd_count_query.scalar()
-
+        for device, reading_count, latest_reading, command_count in rows:
             device_dict = device.to_dict(include_relationships=False)
-            device_dict["sensor_readings_count"] = reading_count or 0
-            device_dict["commands_count"] = command_count or 0
+            device_dict["sensor_readings_count"] = reading_count
+            device_dict["commands_count"] = command_count
             device_dict["latest_reading"] = (
-                latest.timestamp.isoformat() if latest else None
+                latest_reading.isoformat() if latest_reading else None
             )
-
             device_list.append(DeviceWithStats(**device_dict))
 
         return DeviceListResponse(devices=device_list, count=len(device_list))
@@ -115,7 +123,11 @@ async def get_devices(
 
 
 @router.get("/devices/{device_id}", response_model=DeviceWithStats)
-async def get_device(device_id: str, db: AsyncSession = Depends(get_db)):
+async def get_device(
+    device_id: str,
+    current_user: ACLUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     """Get a specific device by ID"""
     try:
         device = await get_device_by_id(db, device_id)
@@ -162,7 +174,11 @@ async def get_device(device_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/devices", response_model=SuccessResponse)
-async def create_device(device: DeviceCreate, db: AsyncSession = Depends(get_db)):
+async def create_device(
+    device: DeviceCreate,
+    current_user: ACLUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     """Create a new device"""
     try:
         # Check if device already exists
@@ -193,7 +209,10 @@ async def create_device(device: DeviceCreate, db: AsyncSession = Depends(get_db)
 
 @router.patch("/devices/{device_id}", response_model=SuccessResponse)
 async def update_device(
-    device_id: str, update: DeviceUpdate, db: AsyncSession = Depends(get_db)
+    device_id: str,
+    update: DeviceUpdate,
+    current_user: ACLUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
     """Update device information"""
     try:
@@ -229,6 +248,7 @@ async def update_device(
 @router.get("/readings", response_model=SensorReadingListResponse)
 async def get_latest_readings(
     limit: int = Query(20, ge=1, le=1000, description="Number of readings to return"),
+    current_user: ACLUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Get latest sensor readings across all devices"""
@@ -265,6 +285,7 @@ async def get_latest_readings(
 async def get_device_sensor_readings(
     device_id: str,
     limit: int = Query(100, ge=1, le=1000, description="Number of readings to return"),
+    current_user: ACLUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Get sensor readings for a specific device"""
@@ -290,7 +311,9 @@ async def get_device_sensor_readings(
 
 @router.post("/readings", response_model=SuccessResponse)
 async def publish_sensor_reading(
-    data: SensorDataRequest, db: AsyncSession = Depends(get_db)
+    data: SensorDataRequest,
+    current_user: ACLUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
     """Publish a sensor reading (stores in DB and publishes to MQTT)"""
     mqtt = get_mqtt_client()
@@ -361,6 +384,7 @@ async def publish_sensor_reading(
 @router.get("/commands", response_model=CommandListResponse)
 async def get_commands(
     limit: int = Query(50, ge=1, le=500, description="Number of commands to return"),
+    current_user: ACLUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Get recent commands across all devices"""
@@ -384,6 +408,7 @@ async def get_commands(
 async def get_device_command_history(
     device_id: str,
     limit: int = Query(50, ge=1, le=500, description="Number of commands to return"),
+    current_user: ACLUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Get command history for a specific device"""
@@ -409,7 +434,9 @@ async def get_device_command_history(
 
 @router.post("/commands", response_model=SuccessResponse)
 async def send_device_command(
-    command: CommandRequest, db: AsyncSession = Depends(get_db)
+    command: CommandRequest,
+    current_user: ACLUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
     """Send a command to a device (stores in DB and publishes to MQTT)"""
     mqtt = get_mqtt_client()
@@ -456,7 +483,10 @@ async def send_device_command(
 
 @router.patch("/commands/{command_id}", response_model=SuccessResponse)
 async def update_command(
-    command_id: int, update: CommandStatusUpdate, db: AsyncSession = Depends(get_db)
+    command_id: int,
+    update: CommandStatusUpdate,
+    current_user: ACLUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
     """Update command status"""
     try:
@@ -489,6 +519,7 @@ async def update_command(
 
 @router.get("/sessions")
 async def get_mqtt_sessions(
+    current_user: ACLUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Get MQTT sessions (in-memory live connections + persisted DB sessions)"""
@@ -529,7 +560,11 @@ async def get_mqtt_sessions(
 
 
 @router.post("/sessions", response_model=SuccessResponse)
-async def create_session(session: SessionCreate, db: AsyncSession = Depends(get_db)):
+async def create_session(
+    session: SessionCreate,
+    current_user: ACLUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     """Create a new MQTT session"""
     try:
         new_session = await create_mqtt_session(
@@ -560,7 +595,11 @@ async def create_session(session: SessionCreate, db: AsyncSession = Depends(get_
 
 
 @router.delete("/sessions/{session_id}", response_model=SuccessResponse)
-async def close_session(session_id: int, db: AsyncSession = Depends(get_db)):
+async def close_session(
+    session_id: int,
+    current_user: ACLUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     """Close an MQTT session"""
     try:
         session = await close_mqtt_session(db, session_id=session_id)
@@ -585,7 +624,10 @@ async def close_session(session_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/stats", response_model=MQTTStatsResponse)
-async def get_mqtt_statistics(db: AsyncSession = Depends(get_db)):
+async def get_mqtt_statistics(
+    current_user: ACLUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     """Get MQTT system statistics"""
     try:
         # Device counts
@@ -666,17 +708,14 @@ async def get_mqtt_statistics(db: AsyncSession = Depends(get_db)):
 
 @router.get("/credentials")
 async def get_mqtt_credentials(
-    token: str = Depends(oauth2_scheme),
+    current_user: ACLUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Get MQTT credentials for the current authenticated user"""
 
-    from app.routes.auth_router import get_current_user
     from app.security.mqtt_credentials import MQTTCredentialManager
     from app.config import settings
 
-    # Get current user
-    current_user = await get_current_user(token, db)
     try:
         mqtt_username, mqtt_password = (
             await MQTTCredentialManager.get_or_create_mqtt_credentials(

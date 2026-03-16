@@ -62,17 +62,11 @@
                 </ion-card>
 
                 <!-- Tabs -->
-                <ion-segment v-model="activeTab" class="tab-segment">
-                    <ion-segment-button value="users">
-                        <ion-label>Users</ion-label>
-                    </ion-segment-button>
-                    <ion-segment-button value="roles">
-                        <ion-label>Roles</ion-label>
-                    </ion-segment-button>
-                    <ion-segment-button value="permissions">
-                        <ion-label>Checker</ion-label>
-                    </ion-segment-button>
-                </ion-segment>
+                <div class="custom-tabs">
+                    <button :class="['custom-tab', { active: activeTab === 'users' }]" @click="activeTab = 'users'">Users</button>
+                    <button :class="['custom-tab', { active: activeTab === 'roles' }]" @click="activeTab = 'roles'">Roles</button>
+                    <button :class="['custom-tab', { active: activeTab === 'permissions' }]" @click="activeTab = 'permissions'">Checker</button>
+                </div>
 
                 <!-- ── USERS TAB ─────────────────────────────────── -->
                 <div v-show="activeTab === 'users'">
@@ -372,7 +366,7 @@ import {
     IonPage, IonHeader, IonToolbar, IonTitle, IonContent, IonButtons, IonButton,
     IonBackButton, IonIcon, IonCard, IonCardContent, IonCardHeader, IonCardTitle,
     IonCardSubtitle, IonItem, IonLabel, IonInput, IonSelect, IonSelectOption,
-    IonChip, IonList, IonSearchbar, IonSegment, IonSegmentButton, IonModal,
+    IonChip, IonList, IonSearchbar, IonModal,
     IonSpinner, alertController
 } from '@ionic/vue';
 import {

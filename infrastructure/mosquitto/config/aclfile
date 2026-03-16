@@ -1,0 +1,8 @@
+# Mosquitto ACL Configuration for Smart Factory
+# See: https://mosquitto.org/man/mosquitto-conf-5.html
+
+# Backend service account — full access
+user smartfactory
+topic readwrite #
+
+# Default: deny all topics not explicitly allowed

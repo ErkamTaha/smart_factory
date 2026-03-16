@@ -2,25 +2,19 @@
 Database configuration and connection setup for Smart Factory (Async Version)
 """
 
-import os
 import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import declarative_base
 from sqlalchemy import text
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Database configuration from environment variables
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql+asyncpg://smartfactory:password123@localhost:5432/smartfactory",
-)
-
-# Create async engine
+# Create async engine using settings (no hardcoded fallback)
 engine = create_async_engine(
-    DATABASE_URL,
-    echo=True,  # Set to False in production
+    settings.DATABASE_URL,
+    echo=settings.DEBUG,
     pool_pre_ping=True,  # Validate connections before use
     pool_recycle=3600,  # Recycle connections every hour
     future=True,

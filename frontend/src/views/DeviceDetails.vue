@@ -136,7 +136,8 @@ import {
     refreshOutline, thermometerOutline, waterOutline, speedometerOutline,
     cloudOffline, send, hardwareChip
 } from 'ionicons/icons';
-import { useIotStore } from '@/stores/iot';
+import { useFactoryStore } from '@/stores/factory';
+import apiService from '@/services/api';
 
 // Props
 const props = defineProps({
@@ -147,38 +148,43 @@ const props = defineProps({
 });
 
 // Store
-const iotStore = useIotStore();
+const factoryStore = useFactoryStore();
 
 // Reactive data
 const commandToSend = ref('');
 const deviceId = ref(props.id);
+const deviceData = ref([]);
+const isLoading = ref(false);
 
 // Computed properties
-const deviceData = computed(() => iotStore.getDeviceData(deviceId.value));
-const sensorTypes = computed(() => iotStore.getDeviceSensorTypes(deviceId.value));
-const isLoading = computed(() => iotStore.isLoading);
+const sensorTypes = computed(() => {
+    const types = new Set(deviceData.value.map(r => r.sensor_type));
+    return [...types];
+});
 const latestReading = computed(() => {
-    const data = deviceData.value;
-    return data.length > 0 ? data[0] : null;
+    return deviceData.value.length > 0 ? deviceData.value[0] : null;
 });
 
 // Methods
 const refreshDeviceData = async () => {
     try {
-        await iotStore.fetchDeviceData(deviceId.value, 20);
+        isLoading.value = true;
+        const response = await apiService.getDeviceData(deviceId.value, 20);
+        deviceData.value = response.data.data || response.data || [];
     } catch (error) {
         console.error('Failed to refresh device data:', error);
+    } finally {
+        isLoading.value = false;
     }
 };
 
 const sendCommand = async () => {
     try {
-        await iotStore.sendCommand({
+        await factoryStore.sendCommand({
             device_id: deviceId.value,
             command: commandToSend.value.trim()
         });
         commandToSend.value = '';
-        // Show success feedback (you could add a toast here)
         console.log('Command sent successfully');
     } catch (error) {
         console.error('Failed to send command:', error);

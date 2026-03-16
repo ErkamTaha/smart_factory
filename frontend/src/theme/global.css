@@ -33,31 +33,38 @@ ion-button {
   align-self: flex-start; /* prevent stretch inside flex/grid containers */
 }
 
-/* ── Segment controls ────────────────────────────────────── */
-ion-segment {
+/* ── Tab controls ────────────────────────────────────────── */
+.custom-tabs {
+  display: flex;
   margin: 16px 16px 0;
   border-radius: 10px;
-  background: var(--ion-color-light-shade);
-  --background: var(--ion-color-light-shade);
+  background: rgba(var(--ion-color-primary-rgb), 0.10);
+  padding: 3px;
+  gap: 3px;
 }
 
-ion-segment-button {
-  --border-radius: 8px;
+.custom-tab {
+  flex: 1;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ion-color-primary);
   font-weight: 500;
   font-size: 13px;
-  min-height: 36px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
 }
 
-/* Primary-coloured segment (add class="tab-segment" to ion-segment) */
-.tab-segment {
-  --background: rgba(var(--ion-color-primary-rgb), 0.10);
+.custom-tab:hover:not(.active) {
+  background: rgba(var(--ion-color-primary-rgb), 0.08);
 }
 
-.tab-segment ion-segment-button {
-  --color: var(--ion-color-primary);
-  --color-checked: #ffffff;
-  --indicator-color: var(--ion-color-primary);
-  --background-checked: var(--ion-color-primary);
+.custom-tab.active {
+  background: var(--ion-color-primary);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(var(--ion-color-primary-rgb), 0.3);
 }
 
 /* ── Shared stat-item (used in ACL / SS / Dashboard) ─────── */

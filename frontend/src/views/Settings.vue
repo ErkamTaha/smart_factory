@@ -171,11 +171,11 @@ import {
 import {
     serverOutline, wifiOutline, refreshOutline, trashOutline, informationCircleOutline
 } from 'ionicons/icons';
-import { useIotStore } from '@/stores/iot';
+import { useFactoryStore } from '@/stores/factory';
 import apiService from '@/services/api';
 
 // Store
-const iotStore = useIotStore();
+const factoryStore = useFactoryStore();
 
 // Reactive data
 const apiUrl = ref('http://localhost:8000');
@@ -188,10 +188,10 @@ const refreshTimer = ref(null);
 const mqttStatus = ref('Unknown');
 
 // Computed properties
-const isConnected = computed(() => iotStore.isConnected);
-const deviceCount = computed(() => iotStore.deviceCount);
-const totalReadings = computed(() => iotStore.totalReadings);
-const isLoading = computed(() => iotStore.isLoading);
+const isConnected = computed(() => factoryStore.isHealthy);
+const deviceCount = computed(() => factoryStore.deviceCount);
+const totalReadings = computed(() => factoryStore.totalSensorReadings);
+const isLoading = computed(() => factoryStore.isLoading);
 const lastUpdated = computed(() => new Date().toLocaleString());
 
 // Alert buttons
@@ -256,8 +256,8 @@ const loadSettings = () => {
 
 const testConnection = async () => {
     try {
-        const health = await iotStore.checkConnection();
-        mqttStatus.value = health.mqtt_status || 'Unknown';
+        await factoryStore.checkHealth();
+        mqttStatus.value = factoryStore.isHealthy ? 'Connected' : 'Disconnected';
         showToastMessage('Connection test completed');
     } catch (error) {
         showToastMessage('Connection test failed');
@@ -266,7 +266,7 @@ const testConnection = async () => {
 
 const refreshAllData = async () => {
     try {
-        await iotStore.refreshAll();
+        await factoryStore.refreshAll();
         showToastMessage('Data refreshed successfully');
     } catch (error) {
         showToastMessage('Failed to refresh data');
@@ -276,9 +276,8 @@ const refreshAllData = async () => {
 const clearLocalData = () => {
     try {
         // Clear store data
-        iotStore.devices = [];
-        iotStore.sensorData = {};
-        iotStore.latestData = [];
+        factoryStore.devices = [];
+        factoryStore.latestSensorData = [];
 
         showToastMessage('Local data cleared');
     } catch (error) {
@@ -317,7 +316,7 @@ const startAutoRefresh = () => {
 
     refreshTimer.value = setInterval(async () => {
         try {
-            await iotStore.refreshAll();
+            await factoryStore.refreshAll();
         } catch (error) {
             console.error('Auto refresh failed:', error);
         }
